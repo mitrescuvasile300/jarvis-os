@@ -2,14 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System dependencies
+# System dependencies (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    git \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Python dependencies
+# Python dependencies (lightweight — no chromadb, no onnxruntime)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -20,10 +18,11 @@ COPY skills/ ./skills/
 COPY scripts/ ./scripts/
 COPY jarvis/ ./jarvis/
 COPY dashboard/ ./dashboard/
+COPY plugins/ ./plugins/
 COPY pyproject.toml .
 
-# Install jarvis CLI
-RUN pip install -e .
+# Install jarvis package
+RUN pip install --no-cache-dir -e .
 
 # Create data directories
 RUN mkdir -p /app/data /app/memory /app/logs
@@ -34,7 +33,6 @@ USER jarvis
 
 EXPOSE 8080
 
-# Health check endpoint
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
     CMD python -m jarvis.healthcheck
 

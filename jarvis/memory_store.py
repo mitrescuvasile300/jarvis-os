@@ -4,7 +4,9 @@ Layers:
 1. Short-term: Current conversation context (in-memory)
 2. Working: Active task state (SQLite)
 3. Long-term: Facts, decisions, preferences (SQLite)
-4. Semantic: Vector search over all knowledge (ChromaDB)
+4. Semantic: SQLite FTS5 full-text search (zero dependencies)
+
+Optional: Install chromadb for vector-based semantic search.
 """
 
 import json
@@ -27,12 +29,13 @@ class MemoryStore:
         self.db: sqlite3.Connection | None = None
         self.chroma_client = None
         self.chroma_collection = None
+        self._has_fts = False
 
         # Short-term memory (in-memory per conversation)
         self._conversations: dict[str, list[dict]] = {}
 
     async def initialize(self):
-        """Set up database and vector store."""
+        """Set up database and search."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
         # SQLite for structured storage
@@ -40,40 +43,34 @@ class MemoryStore:
         self.db.row_factory = sqlite3.Row
         self._create_tables()
 
-        # ChromaDB for vector search (semantic memory layer)
-        vector_store = self.config.get("vector_store", "chromadb")
-        if vector_store == "chromadb":
-            try:
-                import chromadb
-                import os
-                chroma_host = os.environ.get("CHROMA_HOST") or self.config.get("chroma_host", "")
-                chroma_port = int(os.environ.get("CHROMA_PORT", 0)) or self.config.get("chroma_port", 8000)
+        # Try ChromaDB first (optional, for vector search)
+        try:
+            import chromadb
+            import os
+            chroma_host = os.environ.get("CHROMA_HOST") or self.config.get("chroma_host", "")
+            chroma_port = int(os.environ.get("CHROMA_PORT", 0)) or self.config.get("chroma_port", 8000)
 
-                if chroma_host:
-                    # External ChromaDB server (docker-compose.chromadb.yml)
-                    try:
-                        self.chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
-                        self.chroma_client.heartbeat()  # verify connection
-                        logger.info(f"ChromaDB connected to {chroma_host}:{chroma_port}")
-                    except Exception:
-                        logger.warning(f"External ChromaDB at {chroma_host}:{chroma_port} unavailable, using local")
-                        persist_dir = str(Path("data/chroma"))
-                        self.chroma_client = chromadb.PersistentClient(path=persist_dir)
-                else:
-                    # Default: local persistent ChromaDB (no external container needed)
+            if chroma_host:
+                try:
+                    self.chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+                    self.chroma_client.heartbeat()
+                    logger.info(f"ChromaDB connected to {chroma_host}:{chroma_port}")
+                except Exception:
                     persist_dir = str(Path("data/chroma"))
                     self.chroma_client = chromadb.PersistentClient(path=persist_dir)
-                    logger.info("ChromaDB using local storage")
+            else:
+                persist_dir = str(Path("data/chroma"))
+                self.chroma_client = chromadb.PersistentClient(path=persist_dir)
 
-                self.chroma_collection = self.chroma_client.get_or_create_collection(
-                    name="jarvis_memory",
-                    metadata={"hnsw:space": "cosine"},
-                )
-                logger.info(f"ChromaDB ready: {self.chroma_collection.count()} vectors")
-            except ImportError:
-                logger.warning("ChromaDB not installed — semantic search disabled")
-            except Exception as e:
-                logger.warning(f"ChromaDB init failed: {e} — semantic search disabled")
+            self.chroma_collection = self.chroma_client.get_or_create_collection(
+                name="jarvis_memory",
+                metadata={"hnsw:space": "cosine"},
+            )
+            logger.info(f"ChromaDB ready: {self.chroma_collection.count()} vectors")
+        except ImportError:
+            logger.info("ChromaDB not installed — using SQLite FTS5 for search (lightweight)")
+        except Exception as e:
+            logger.warning(f"ChromaDB failed: {e} — using SQLite FTS5 for search")
 
     def _create_tables(self):
         """Create SQLite tables."""
@@ -110,6 +107,19 @@ class MemoryStore:
             CREATE INDEX IF NOT EXISTS idx_conv_ts ON conversations(timestamp);
             CREATE INDEX IF NOT EXISTS idx_knowledge_cat ON knowledge(category);
         """)
+
+        # FTS5 full-text search (built into SQLite, zero deps)
+        try:
+            self.db.executescript("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+                    content, type, source_id, timestamp
+                );
+            """)
+            self._has_fts = True
+        except Exception as e:
+            logger.debug(f"FTS5 not available: {e}")
+            self._has_fts = False
+
         self.db.commit()
 
     # ── Conversation Memory (Short-term) ──────────────────────
@@ -138,21 +148,8 @@ class MemoryStore:
         # Keep only last 50 messages in memory
         self._conversations[conversation_id] = self._conversations[conversation_id][-50:]
 
-        # Vector store
-        if self.chroma_collection:
-            try:
-                self.chroma_collection.add(
-                    ids=[msg_id],
-                    documents=[content],
-                    metadatas=[{
-                        "type": "conversation",
-                        "role": role,
-                        "conversation_id": conversation_id,
-                        "timestamp": timestamp,
-                    }],
-                )
-            except Exception as e:
-                logger.debug(f"Vector store failed: {e}")
+        # Index for search
+        self._index_for_search(msg_id, content, "conversation", timestamp)
 
     async def get_conversation(self, conversation_id: str, limit: int = 20) -> list[dict]:
         """Get recent conversation messages."""
@@ -185,21 +182,8 @@ class MemoryStore:
         )
         self.db.commit()
 
-        # Vector store for semantic search
-        if self.chroma_collection:
-            try:
-                self.chroma_collection.add(
-                    ids=[knowledge_id],
-                    documents=[content],
-                    metadatas=[{
-                        "type": "knowledge",
-                        "category": category,
-                        "source": source,
-                        "timestamp": now,
-                    }],
-                )
-            except Exception as e:
-                logger.debug(f"Vector store failed: {e}")
+        # Index for search
+        self._index_for_search(knowledge_id, content, "knowledge", now)
 
         logger.debug(f"Knowledge stored: {content[:80]}...")
 
@@ -232,13 +216,37 @@ class MemoryStore:
 
         return json.loads(row["value"])
 
+    # ── Search Indexing ─────────────────────────────────────
+
+    def _index_for_search(self, source_id: str, content: str, doc_type: str, timestamp: str):
+        """Index content for search (ChromaDB or FTS5)."""
+        if self.chroma_collection:
+            try:
+                self.chroma_collection.add(
+                    ids=[source_id],
+                    documents=[content],
+                    metadatas=[{"type": doc_type, "timestamp": timestamp}],
+                )
+            except Exception as e:
+                logger.debug(f"ChromaDB index failed: {e}")
+
+        if self._has_fts:
+            try:
+                self.db.execute(
+                    "INSERT INTO memory_fts (content, type, source_id, timestamp) VALUES (?, ?, ?, ?)",
+                    (content, doc_type, source_id, timestamp),
+                )
+                self.db.commit()
+            except Exception as e:
+                logger.debug(f"FTS index failed: {e}")
+
     # ── Semantic Search ──────────────────────────────────────
 
     async def search(self, query: str, limit: int = 10) -> list[dict]:
-        """Semantic search across all memory."""
+        """Search across all memory (vector or full-text)."""
         results = []
 
-        # Vector search
+        # 1. ChromaDB vector search (if available)
         if self.chroma_collection:
             try:
                 search_results = self.chroma_collection.query(
@@ -258,7 +266,25 @@ class MemoryStore:
             except Exception as e:
                 logger.debug(f"Vector search failed: {e}")
 
-        # Fall back / supplement with keyword search in SQLite
+        # 2. SQLite FTS5 full-text search (fallback or supplement)
+        if len(results) < limit and self._has_fts:
+            remaining = limit - len(results)
+            try:
+                cursor = self.db.execute(
+                    "SELECT content, type, source_id, rank FROM memory_fts WHERE memory_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (query, remaining),
+                )
+                for row in cursor.fetchall():
+                    results.append({
+                        "content": row["content"],
+                        "type": row["type"],
+                        "relevance": 0.7,
+                        "metadata": {"source": "fts5"},
+                    })
+            except Exception:
+                pass
+
+        # 3. Simple LIKE fallback
         if len(results) < limit:
             remaining = limit - len(results)
             cursor = self.db.execute(
