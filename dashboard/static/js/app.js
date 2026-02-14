@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════
-   Jarvis OS — Mission Control JavaScript
+   Jarvis OS — Mission Control v2.0
+   Features: Direct Jarvis chat, Agent spawning, Group Hub
    ═══════════════════════════════════════════════════════════ */
 
 const API_BASE = window.location.origin;
@@ -9,63 +10,53 @@ const WS_BASE = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${wi
 
 const state = {
   agents: [],
-  settings: {
-    apiKeys: {},
-    defaultModel: 'gpt-4o',
-  },
+  settings: { apiKeys: {}, defaultModel: 'gpt-5.2' },
   currentPage: 'dashboard',
   chatAgent: null,
+  jarvisHistory: [],
   chatHistories: {},
+  hubHistory: [],
   logs: [],
 };
 
-// Load from localStorage
 function loadState() {
   try {
-    const saved = localStorage.getItem('jarvis_state');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      Object.assign(state, parsed);
-    }
-  } catch (e) { console.warn('Failed to load state:', e); }
+    const saved = localStorage.getItem('jarvis_state_v2');
+    if (saved) Object.assign(state, JSON.parse(saved));
+  } catch (e) { console.warn('State load failed:', e); }
 }
 
 function saveState() {
   try {
-    localStorage.setItem('jarvis_state', JSON.stringify(state));
-  } catch (e) { console.warn('Failed to save state:', e); }
+    localStorage.setItem('jarvis_state_v2', JSON.stringify(state));
+  } catch (e) {}
 }
 
 // ── Navigation ──────────────────────────────────────────────
 
 document.querySelectorAll('.nav-item').forEach(item => {
-  item.addEventListener('click', () => {
-    const page = item.dataset.page;
-    navigateTo(page);
-  });
+  item.addEventListener('click', () => navigateTo(item.dataset.page));
 });
 
 function navigateTo(page) {
-  // Hide all pages
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
-  // Show target
   const target = document.getElementById(`page-${page}`);
   if (target) {
     target.classList.remove('hidden');
     target.querySelector('.page-content')?.classList.add('fade-in');
   }
 
-  // Update nav
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
 
   state.currentPage = page;
 
-  // Refresh page data
   if (page === 'dashboard') refreshDashboard();
   if (page === 'agents') refreshAgentsGrid();
-  if (page === 'chat') refreshChatSelector();
+  if (page === 'jarvis-chat') initJarvisChat();
+  if (page === 'hub') initHub();
   if (page === 'logs') refreshLogs();
+  if (page === 'plugins') refreshPlugins();
 }
 
 // ── Tabs ────────────────────────────────────────────────────
@@ -74,12 +65,8 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
     const tabId = tab.dataset.tab;
     const parent = tab.closest('.page-content') || tab.parentElement.parentElement;
-
-    // Update tab buttons
     tab.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-
-    // Show/hide tab content
     parent.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
     const content = parent.querySelector(`#tab-${tabId}`);
     if (content) content.classList.remove('hidden');
@@ -92,47 +79,47 @@ function refreshDashboard() {
   const activeCount = state.agents.filter(a => a.status === 'running').length;
   document.getElementById('stat-active').textContent = activeCount;
   document.getElementById('stat-active-note').textContent =
-    activeCount > 0 ? `${state.agents.length} total agents` : 'No agents yet';
+    activeCount > 0 ? `${state.agents.length} total` : 'No agents yet';
 
-  // Count memory entries
-  let memoryCount = 0;
+  let memoryCount = state.jarvisHistory.length;
   Object.values(state.chatHistories).forEach(h => memoryCount += h.length);
   document.getElementById('stat-memory').textContent = memoryCount;
 
-  // Provider status
   const providers = Object.keys(state.settings.apiKeys).filter(k => state.settings.apiKeys[k]);
   if (providers.length > 0) {
     document.getElementById('stat-provider').textContent = providers[0];
-    document.getElementById('stat-model-note').textContent = `${providers.length} provider(s) configured`;
+    document.getElementById('stat-model-note').textContent = `${providers.length} configured`;
   }
 
-  // Agent count badge
   document.getElementById('agent-count-badge').textContent = state.agents.length;
 
-  // Agent list
   const container = document.getElementById('dashboard-agents-list');
   if (state.agents.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">🤖</div>
-        <h3>No agents yet</h3>
-        <p>Create your first AI agent to get started.</p>
-        <button class="btn btn-primary" onclick="openNewAgentModal()">➕ Create Agent</button>
-      </div>`;
-    return;
+    container.innerHTML = `<div style="text-align:center; padding:30px; color:var(--text-muted)">
+      No agents yet. Chat with Jarvis or click Create New.
+    </div>`;
+  } else {
+    container.innerHTML = '<div class="grid grid-3">' + state.agents.map(agentCardHTML).join('') + '</div>';
   }
 
-  container.innerHTML = '<div class="grid grid-3">' + state.agents.map(a => agentCardHTML(a)).join('') + '</div>';
+  // Fetch live status from server
+  fetchStatus();
+}
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/status`);
+    if (res.ok) {
+      const data = await res.json();
+      document.getElementById('stat-provider').textContent = data.agent?.provider || 'Not set';
+      document.getElementById('stat-model-note').textContent = data.agent?.model || '';
+    }
+  } catch (e) {}
 }
 
 function agentCardHTML(agent) {
-  const icons = {
-    trading: '💹', research: '🔬', content: '✍️', 'social-media': '📱',
-    support: '🎧', devops: '🛠️', 'personal-assistant': '🧑‍💼', custom: '⚡',
-  };
+  const icons = { trading: '💹', research: '🔬', content: '✍️', devops: '🛠️', support: '🎧', 'personal-assistant': '🧑‍💼', custom: '⚡' };
   const icon = icons[agent.template] || '🤖';
-  const avatarClass = ['trading', 'research', 'content', 'devops', 'support'].includes(agent.template) ? agent.template : 'default';
-
   return `
     <div class="agent-card" onclick="openAgentChat('${agent.id}')">
       <div class="agent-card-header">
@@ -140,23 +127,20 @@ function agentCardHTML(agent) {
           <div class="agent-name">${agent.name}</div>
           <div class="agent-template">${agent.template} • ${agent.model}</div>
         </div>
-        <div class="agent-avatar ${avatarClass}">${icon}</div>
+        <div class="agent-avatar ${agent.template}">${icon}</div>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center">
         <span class="status status-${agent.status}">
-          <span class="status-dot"></span>
-          ${agent.status}
+          <span class="status-dot"></span> ${agent.status}
         </span>
         <div style="display:flex; gap:6px">
-          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); toggleAgent('${agent.id}')" title="${agent.status === 'running' ? 'Stop' : 'Start'}">
-            ${agent.status === 'running' ? '⏸' : '▶️'}
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteAgent('${agent.id}')" title="Delete">🗑</button>
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); toggleAgent('${agent.id}')">${agent.status === 'running' ? '⏸' : '▶️'}</button>
+          <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteAgent('${agent.id}')">🗑</button>
         </div>
       </div>
       <div class="agent-meta">
         <span>🔧 ${agent.tools?.length || 0} tools</span>
-        <span>🧠 ${(state.chatHistories[agent.id] || []).length} msgs</span>
+        <span>💬 ${(state.chatHistories[agent.id] || []).length} msgs</span>
         <span>⏱ ${timeSince(agent.createdAt)}</span>
       </div>
     </div>`;
@@ -166,19 +150,16 @@ function agentCardHTML(agent) {
 
 function refreshAgentsGrid() {
   const grid = document.getElementById('agents-grid');
-
   if (state.agents.length === 0) {
-    grid.innerHTML = `
-      <div class="empty-state" style="grid-column:1/-1">
-        <div class="empty-icon">🤖</div>
-        <h3>No agents yet</h3>
-        <p>Create your first AI agent to get started.</p>
-        <button class="btn btn-primary" onclick="openNewAgentModal()">➕ Create Agent</button>
-      </div>`;
-    return;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🤖</div>
+      <h3>No agents yet</h3>
+      <p>Create one manually or ask Jarvis to create one for you.</p>
+      <button class="btn btn-primary" onclick="openNewAgentModal()">➕ Create Agent</button>
+    </div>`;
+  } else {
+    grid.innerHTML = state.agents.map(agentCardHTML).join('');
   }
-
-  grid.innerHTML = state.agents.map(a => agentCardHTML(a)).join('');
 }
 
 // ── New Agent Modal ─────────────────────────────────────────
@@ -190,19 +171,6 @@ document.querySelectorAll('.template-option').forEach(opt => {
     document.querySelectorAll('.template-option').forEach(o => o.classList.remove('selected'));
     opt.classList.add('selected');
     selectedTemplate = opt.dataset.template;
-
-    // Auto-fill personality
-    const personalities = {
-      trading: 'Disciplined quantitative trader. Data-driven, risk-aware, never emotional.',
-      research: 'Thorough researcher. Verifies facts from multiple sources. Clear and concise.',
-      content: 'Creative content strategist. Engaging, authentic, adapts tone per platform.',
-      'social-media': 'Social media expert. Grows followers organically. Never spammy.',
-      support: 'Patient, empathetic support agent. Always helpful, escalates complex issues.',
-      devops: 'Calm under pressure SRE. Follows runbooks precisely. Documents everything.',
-      'personal-assistant': 'Proactive personal assistant. Anticipates needs, stays organized.',
-      custom: '',
-    };
-    document.getElementById('new-agent-personality').placeholder = personalities[selectedTemplate] || 'Describe personality...';
   });
 });
 
@@ -215,53 +183,34 @@ function closeNewAgentModal() {
   document.getElementById('new-agent-modal').classList.remove('active');
 }
 
-function createAgent() {
-  const name = document.getElementById('new-agent-name').value.trim();
-  if (!name) {
-    showToast('Please enter an agent name', 'error');
-    return;
-  }
+function createAgent(opts = null) {
+  const name = opts?.name || document.getElementById('new-agent-name').value.trim();
+  const model = opts?.model || document.getElementById('new-agent-model').value;
+  const template = opts?.template || selectedTemplate;
+  const personality = opts?.personality || document.getElementById('new-agent-personality')?.value?.trim() || '';
 
-  // Check for duplicate name
-  if (state.agents.find(a => a.name === name)) {
-    showToast('Agent with this name already exists', 'error');
-    return;
-  }
+  if (!name) { showToast('Please enter an agent name', 'error'); return null; }
+  if (state.agents.find(a => a.name === name)) { showToast('Agent already exists', 'error'); return null; }
 
-  const model = document.getElementById('new-agent-model').value;
-  const personality = document.getElementById('new-agent-personality').value.trim();
-
-  // Determine provider from model
   let provider = 'openai';
   if (model.startsWith('claude')) provider = 'anthropic';
-  else if (['llama3', 'mistral', 'codellama', 'phi3'].includes(model)) provider = 'ollama';
+  else if (['llama3', 'llama3.1', 'mistral', 'codellama', 'phi3'].includes(model)) provider = 'ollama';
   else if (model.startsWith('gemini')) provider = 'google';
-
-  // Check if API key exists for this provider
-  if (provider !== 'ollama' && !state.settings.apiKeys[provider]) {
-    showToast(`⚠️ No API key for ${provider}. Go to Settings → API Keys first.`, 'error');
-    return;
-  }
 
   const templateTools = {
     trading: ['web_search', 'http_request', 'run_code', 'read_file', 'write_file', 'shell_command'],
     research: ['web_search', 'http_request', 'read_file', 'write_file', 'run_code'],
     content: ['web_search', 'http_request', 'read_file', 'write_file'],
-    'social-media': ['web_search', 'http_request', 'read_file', 'write_file'],
-    support: ['web_search', 'read_file', 'search_files', 'http_request'],
-    devops: ['shell_command', 'http_request', 'read_file', 'write_file', 'run_code', 'search_files'],
+    support: ['web_search', 'read_file', 'search_files'],
+    devops: ['shell_command', 'http_request', 'read_file', 'write_file', 'run_code'],
     'personal-assistant': ['web_search', 'http_request', 'read_file', 'write_file', 'run_code'],
     custom: ['web_search', 'read_file', 'write_file'],
   };
 
   const agent = {
-    id: generateId(),
-    name,
-    template: selectedTemplate,
-    model,
-    provider,
-    personality: personality || null,
-    tools: templateTools[selectedTemplate] || [],
+    id: 'agent_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
+    name, template, model, provider, personality,
+    tools: templateTools[template] || templateTools.custom,
     status: 'running',
     createdAt: Date.now(),
   };
@@ -270,15 +219,15 @@ function createAgent() {
   state.chatHistories[agent.id] = [];
   saveState();
 
-  addLog('success', `Agent "${name}" created (${selectedTemplate} / ${model})`);
-
+  addLog('success', `Agent "${name}" created (${template}/${model})`);
   closeNewAgentModal();
-  document.getElementById('new-agent-name').value = '';
-  document.getElementById('new-agent-personality').value = '';
-
   showToast(`🤖 Agent "${name}" created!`, 'success');
   refreshDashboard();
-  navigateTo('dashboard');
+
+  // Add to hub
+  addHubSystemMessage(`🤖 Agent "${name}" joined the hub`);
+
+  return agent;
 }
 
 // ── Agent Actions ───────────────────────────────────────────
@@ -286,30 +235,20 @@ function createAgent() {
 function toggleAgent(id) {
   const agent = state.agents.find(a => a.id === id);
   if (!agent) return;
-
   agent.status = agent.status === 'running' ? 'stopped' : 'running';
   saveState();
-
-  addLog('info', `Agent "${agent.name}" ${agent.status}`);
   showToast(`Agent "${agent.name}" ${agent.status}`, 'info');
-
   refreshDashboard();
   refreshAgentsGrid();
 }
 
 function deleteAgent(id) {
   const agent = state.agents.find(a => a.id === id);
-  if (!agent) return;
-
-  if (!confirm(`Delete agent "${agent.name}"? This cannot be undone.`)) return;
-
+  if (!agent || !confirm(`Delete "${agent.name}"?`)) return;
   state.agents = state.agents.filter(a => a.id !== id);
   delete state.chatHistories[id];
   saveState();
-
-  addLog('warn', `Agent "${agent.name}" deleted`);
   showToast(`Agent "${agent.name}" deleted`, 'info');
-
   refreshDashboard();
   refreshAgentsGrid();
 }
@@ -317,148 +256,268 @@ function deleteAgent(id) {
 function openAgentChat(id) {
   state.chatAgent = id;
   saveState();
-  navigateTo('chat');
-  switchChatAgent(id);
-}
 
-// ── Chat ────────────────────────────────────────────────────
-
-function refreshChatSelector() {
-  const select = document.getElementById('chat-agent-select');
-  select.innerHTML = '<option value="">Select agent...</option>';
-  state.agents.forEach(a => {
-    const opt = document.createElement('option');
-    opt.value = a.id;
-    opt.textContent = `${a.name} (${a.template})`;
-    if (state.chatAgent === a.id) opt.selected = true;
-    select.appendChild(opt);
-  });
-
-  if (state.chatAgent) switchChatAgent(state.chatAgent);
-}
-
-function switchChatAgent(id) {
   const agent = state.agents.find(a => a.id === id);
-  if (!agent) {
-    document.getElementById('chat-agent-name').textContent = 'Select an agent';
-    document.getElementById('chat-input').disabled = true;
-    document.getElementById('chat-send').disabled = true;
-    return;
+  if (agent) {
+    document.getElementById('chat-agent-name').textContent = agent.name;
+    renderAgentChat(id);
+    connectAgentWs(id);
   }
-
-  state.chatAgent = id;
-  saveState();
-
-  document.getElementById('chat-agent-name').textContent = `${agent.name}`;
-  document.getElementById('chat-input').disabled = false;
-  document.getElementById('chat-send').disabled = false;
-  document.getElementById('chat-agent-select').value = id;
-
-  // Try WebSocket connection for streaming
-  connectWebSocket(id);
-
-  renderChatMessages(id);
+  navigateTo('chat');
 }
 
-function renderChatMessages(agentId) {
-  const container = document.getElementById('chat-messages');
-  const messages = state.chatHistories[agentId] || [];
+// ═══════════════════════════════════════════════════════════
+// JARVIS DIRECT CHAT (always available, no agent needed)
+// ═══════════════════════════════════════════════════════════
 
-  if (messages.length === 0) {
-    const agent = state.agents.find(a => a.id === agentId);
+let jarvisWs = null;
+let jarvisStreaming = '';
+
+function initJarvisChat() {
+  renderJarvisMessages();
+  connectJarvisWs();
+  setTimeout(() => {
+    const input = document.getElementById('jarvis-input');
+    if (input) input.focus();
+  }, 100);
+}
+
+function connectJarvisWs() {
+  if (jarvisWs && jarvisWs.readyState === WebSocket.OPEN) return;
+
+  try {
+    jarvisWs = new WebSocket(`${WS_BASE}/ws/chat?agent_id=jarvis`);
+
+    jarvisWs.onopen = () => {
+      const el = document.getElementById('jarvis-connection-status');
+      if (el) { el.innerHTML = '<span class="status-dot"></span> Connected'; el.className = 'status status-running'; }
+    };
+
+    jarvisWs.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleJarvisWsMessage(data);
+    };
+
+    jarvisWs.onerror = () => { jarvisWs = null; };
+    jarvisWs.onclose = () => {
+      jarvisWs = null;
+      const el = document.getElementById('jarvis-connection-status');
+      if (el) { el.innerHTML = '<span class="status-dot"></span> Reconnecting...'; el.className = 'status status-idle'; }
+      setTimeout(connectJarvisWs, 3000);
+    };
+  } catch (e) { jarvisWs = null; }
+}
+
+function handleJarvisWsMessage(data) {
+  const container = document.getElementById('jarvis-messages');
+  if (!container) return;
+
+  if (data.type === 'token') {
+    jarvisStreaming += data.text;
+    ensureStreamingBubble(container, jarvisStreaming);
+  } else if (data.type === 'thinking') {
+    ensureStreamingBubble(container, '⏳ Thinking...');
+  } else if (data.type === 'tool_call') {
+    const status = data.status === 'done' ? '✅' : '🔧';
+    ensureStreamingBubble(container, jarvisStreaming + `\n${status} ${data.tool}`);
+  } else if (data.type === 'done') {
+    removeStreamingBubble(container);
+    const finalText = data.full_text || jarvisStreaming;
+    state.jarvisHistory.push({
+      role: 'assistant', content: finalText,
+      tools_used: data.tools_used || [], timestamp: Date.now(),
+    });
+    saveState();
+    renderJarvisMessages();
+    jarvisStreaming = '';
+    enableJarvisInput(true);
+
+    // Check if Jarvis wants to create an agent
+    detectAgentCreation(finalText);
+  } else if (data.type === 'error') {
+    removeStreamingBubble(container);
+    showToast(`Error: ${data.message}`, 'error');
+    enableJarvisInput(true);
+  }
+}
+
+function renderJarvisMessages() {
+  const container = document.getElementById('jarvis-messages');
+  if (!container) return;
+
+  if (state.jarvisHistory.length === 0) {
     container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-icon">💬</div>
-        <h3>Chat with ${agent?.name || 'Agent'}</h3>
-        <p>Type a message below to start the conversation.</p>
+      <div class="jarvis-welcome">
+        <div class="jarvis-welcome-icon">⚡</div>
+        <h2>Hey, I'm Jarvis</h2>
+        <p>Your AI operating system. I can help with anything — ask questions, create agents, search the web, write code, or just chat.</p>
+        <div class="jarvis-suggestions">
+          <button class="suggestion-chip" onclick="sendJarvisMessage('What can you do?')">What can you do?</button>
+          <button class="suggestion-chip" onclick="sendJarvisMessage('Create a trading agent for crypto')">Create a trading agent</button>
+          <button class="suggestion-chip" onclick="sendJarvisMessage('Search the web for latest AI news')">Search AI news</button>
+          <button class="suggestion-chip" onclick="sendJarvisMessage('Help me write a Python script')">Help me code</button>
+        </div>
       </div>`;
     return;
   }
 
-  container.innerHTML = messages.map(m => {
+  container.innerHTML = state.jarvisHistory.map(m => {
     const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    let html = `<div class="chat-message ${m.role}">`;
+    const isUser = m.role === 'user';
+    let html = `<div class="chat-message ${isUser ? 'user' : 'agent'}">`;
     html += `<div>${formatMessage(m.content)}</div>`;
-    if (m.tools_used?.length) {
-      html += `<div class="msg-tools">🔧 ${m.tools_used.join(', ')}</div>`;
-    }
-    html += `<div class="msg-meta">${time}</div>`;
-    html += `</div>`;
+    if (m.tools_used?.length) html += `<div class="msg-tools">🔧 ${m.tools_used.join(', ')}</div>`;
+    html += `<div class="msg-meta">${time}</div></div>`;
     return html;
   }).join('');
 
   container.scrollTop = container.scrollHeight;
 }
 
-function formatMessage(text) {
-  // Basic markdown
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:3px">$1</code>')
-    .replace(/\n/g, '<br>');
+function sendJarvisMessage(text) {
+  const input = document.getElementById('jarvis-input');
+  const message = text || input?.value?.trim();
+  if (!message) return;
+
+  // Navigate to Jarvis chat if not there
+  if (state.currentPage !== 'jarvis-chat') navigateTo('jarvis-chat');
+
+  // Add user message
+  state.jarvisHistory.push({ role: 'user', content: message, timestamp: Date.now() });
+  if (input) input.value = '';
+  saveState();
+  renderJarvisMessages();
+  enableJarvisInput(false);
+
+  // Try WebSocket
+  if (jarvisWs && jarvisWs.readyState === WebSocket.OPEN) {
+    jarvisStreaming = '';
+    jarvisWs.send(JSON.stringify({
+      type: 'message', text: message, agent_id: 'jarvis', conversation_id: 'jarvis_main',
+    }));
+    return;
+  }
+
+  // HTTP fallback
+  sendJarvisHTTP(message);
 }
 
-// ── WebSocket Connection ────────────────────────────────────
-
-let chatWs = null;
-let streamingMessage = '';
-
-function connectWebSocket(agentId) {
-  if (chatWs) { chatWs.close(); chatWs = null; }
-
+async function sendJarvisHTTP(message) {
   try {
-    chatWs = new WebSocket(`${WS_BASE}/ws/chat?agent_id=${agentId}`);
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, conversation_id: 'jarvis_main' }),
+    });
 
-    chatWs.onopen = () => {
-      addLog('info', `WebSocket connected for agent ${agentId}`);
-    };
-
-    chatWs.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      handleWsMessage(data, agentId);
-    };
-
-    chatWs.onerror = () => {
-      chatWs = null; // Fallback to HTTP
-    };
-
-    chatWs.onclose = () => {
-      chatWs = null;
-    };
+    if (res.ok) {
+      const data = await res.json();
+      state.jarvisHistory.push({
+        role: 'assistant', content: data.text || 'I received your message.',
+        tools_used: data.tools_used || [], timestamp: Date.now(),
+      });
+    } else {
+      state.jarvisHistory.push({
+        role: 'assistant', content: '⚠️ Server returned an error. Check Settings → API Keys.',
+        timestamp: Date.now(),
+      });
+    }
   } catch (e) {
-    chatWs = null; // WebSocket not available, use HTTP fallback
+    // Offline — simulate
+    await sleep(600);
+    state.jarvisHistory.push({
+      role: 'assistant',
+      content: simulateJarvisResponse(message),
+      timestamp: Date.now(),
+    });
+  }
+
+  saveState();
+  renderJarvisMessages();
+  enableJarvisInput(true);
+}
+
+function simulateJarvisResponse(message) {
+  const msg = message.toLowerCase();
+  if (msg.includes('create') && msg.includes('agent')) {
+    return `I'd love to create an agent for you! Here's what I can set up:\n\n• **Trading Agent** — Crypto analysis & automated trading\n• **Research Agent** — Deep web research & daily briefings\n• **Content Agent** — Writing, social media, content creation\n• **DevOps Agent** — Infrastructure monitoring & automation\n• **Custom Agent** — Anything you want!\n\nJust tell me the name, type, and I'll spawn it. Or use the ➕ button in the sidebar.\n\n_Note: Connect an API key in Settings to enable real AI responses._`;
+  }
+  if (msg.includes('what can you do') || msg.includes('help')) {
+    return `I'm **Jarvis**, your AI operating system. Here's what I can do:\n\n🔍 **Search the web** — Find information, news, research\n💻 **Write & run code** — Python, JavaScript, any language\n🤖 **Create agents** — Spawn specialized AI agents\n📊 **Analyze data** — Process files, charts, reports\n🔧 **Use tools** — HTTP requests, file management, shell commands\n🧠 **Remember things** — I learn from our conversations\n\n_Configure your API key in Settings for full capabilities._`;
+  }
+  return `I received your message. To enable full AI responses, please add an API key in **Settings → API Keys** (OpenAI, Anthropic, Google, or use Ollama for free).\n\nOnce configured, I can:\n• Answer questions with real AI\n• Search the web\n• Run code\n• Create and manage agents`;
+}
+
+function enableJarvisInput(enabled) {
+  const input = document.getElementById('jarvis-input');
+  const btn = document.getElementById('jarvis-send');
+  if (input) { input.disabled = !enabled; if (enabled) input.focus(); }
+  if (btn) btn.disabled = !enabled;
+}
+
+function handleJarvisKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendJarvisMessage();
   }
 }
 
-function handleWsMessage(data, agentId) {
+// ── Agent auto-detection from Jarvis response ────────────
+
+function detectAgentCreation(text) {
+  // If Jarvis mentions creating an agent in its response,
+  // look for pattern: [SPAWN_AGENT:name:template:model]
+  const match = text.match(/\[SPAWN_AGENT:([^:]+):([^:]+):([^\]]+)\]/);
+  if (match) {
+    const [, name, template, model] = match;
+    const agent = createAgent({ name, template, model });
+    if (agent) {
+      showToast(`⚡ Jarvis created agent "${name}"`, 'success');
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// AGENT CHAT (individual agent conversations)
+// ═══════════════════════════════════════════════════════════
+
+let agentWs = null;
+let agentStreaming = '';
+
+function connectAgentWs(agentId) {
+  if (agentWs) { agentWs.close(); agentWs = null; }
+
+  try {
+    agentWs = new WebSocket(`${WS_BASE}/ws/chat?agent_id=${agentId}`);
+    agentWs.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleAgentWsMessage(data, agentId);
+    };
+    agentWs.onerror = () => { agentWs = null; };
+    agentWs.onclose = () => { agentWs = null; };
+  } catch (e) { agentWs = null; }
+}
+
+function handleAgentWsMessage(data, agentId) {
   const container = document.getElementById('chat-messages');
+  if (!container) return;
 
   if (data.type === 'token') {
-    // Streaming token
-    streamingMessage += data.text;
-    updateStreamingBubble(container, streamingMessage);
+    agentStreaming += data.text;
+    ensureStreamingBubble(container, agentStreaming);
   } else if (data.type === 'thinking') {
-    // Show thinking indicator
     ensureStreamingBubble(container, '⏳ Thinking...');
-  } else if (data.type === 'tool_call') {
-    // Tool being used
-    updateStreamingBubble(container, streamingMessage + `\n🔧 Using ${data.tool}...`);
   } else if (data.type === 'done') {
-    // Final response
-    const finalText = data.full_text || streamingMessage;
     removeStreamingBubble(container);
-
+    const finalText = data.full_text || agentStreaming;
+    if (!state.chatHistories[agentId]) state.chatHistories[agentId] = [];
     state.chatHistories[agentId].push({
-      role: 'agent',
-      content: finalText,
-      tools_used: data.tools_used || [],
-      timestamp: Date.now(),
+      role: 'agent', content: finalText,
+      tools_used: data.tools_used || [], timestamp: Date.now(),
     });
     saveState();
-    renderChatMessages(agentId);
-    streamingMessage = '';
-
-    // Re-enable input
+    renderAgentChat(agentId);
+    agentStreaming = '';
     document.getElementById('chat-send').disabled = false;
     document.getElementById('chat-input').disabled = false;
     document.getElementById('chat-input').focus();
@@ -470,24 +529,31 @@ function handleWsMessage(data, agentId) {
   }
 }
 
-function ensureStreamingBubble(container, text) {
-  let bubble = container.querySelector('.streaming-bubble');
-  if (!bubble) {
-    bubble = document.createElement('div');
-    bubble.className = 'chat-message agent streaming-bubble';
-    container.appendChild(bubble);
+function renderAgentChat(agentId) {
+  const container = document.getElementById('chat-messages');
+  const messages = state.chatHistories[agentId] || [];
+
+  if (messages.length === 0) {
+    const agent = state.agents.find(a => a.id === agentId);
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">💬</div>
+      <h3>Chat with ${agent?.name || 'Agent'}</h3>
+      <p>Type a message below to start.</p>
+    </div>`;
+    return;
   }
-  bubble.innerHTML = formatMessage(text);
+
+  container.innerHTML = messages.map(m => {
+    const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isUser = m.role === 'user';
+    let html = `<div class="chat-message ${isUser ? 'user' : 'agent'}">`;
+    html += `<div>${formatMessage(m.content)}</div>`;
+    if (m.tools_used?.length) html += `<div class="msg-tools">🔧 ${m.tools_used.join(', ')}</div>`;
+    html += `<div class="msg-meta">${time}</div></div>`;
+    return html;
+  }).join('');
+
   container.scrollTop = container.scrollHeight;
-}
-
-function updateStreamingBubble(container, text) {
-  ensureStreamingBubble(container, text);
-}
-
-function removeStreamingBubble(container) {
-  const bubble = container.querySelector('.streaming-bubble');
-  if (bubble) bubble.remove();
 }
 
 async function sendMessage() {
@@ -495,175 +561,280 @@ async function sendMessage() {
   const message = input.value.trim();
   if (!message || !state.chatAgent) return;
 
-  const agent = state.agents.find(a => a.id === state.chatAgent);
-  if (!agent) return;
-
-  // Add user message
-  if (!state.chatHistories[agent.id]) state.chatHistories[agent.id] = [];
-  state.chatHistories[agent.id].push({
-    role: 'user',
-    content: message,
-    timestamp: Date.now(),
-  });
+  const agentId = state.chatAgent;
+  if (!state.chatHistories[agentId]) state.chatHistories[agentId] = [];
+  state.chatHistories[agentId].push({ role: 'user', content: message, timestamp: Date.now() });
 
   input.value = '';
-  renderChatMessages(agent.id);
-
-  const sendBtn = document.getElementById('chat-send');
-  sendBtn.disabled = true;
+  renderAgentChat(agentId);
+  document.getElementById('chat-send').disabled = true;
   input.disabled = true;
 
-  // Try WebSocket first (streaming)
-  if (chatWs && chatWs.readyState === WebSocket.OPEN) {
-    streamingMessage = '';
-    chatWs.send(JSON.stringify({
-      type: 'message',
-      text: message,
-      agent_id: agent.id,
-      conversation_id: `chat_${agent.id}`,
+  // WebSocket
+  if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+    agentStreaming = '';
+    agentWs.send(JSON.stringify({
+      type: 'message', text: message, agent_id: agentId, conversation_id: `chat_${agentId}`,
     }));
-    addLog('info', `[${agent.name}] Chat (WS): "${message.substring(0, 50)}..."`);
-    return; // Response handled by onmessage
+    return;
   }
 
-  // Fallback to HTTP
+  // HTTP fallback
   try {
-    let response;
-    try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message,
-          agent_id: agent.id,
-          conversation_id: `chat_${agent.id}`,
-        }),
-      });
-      if (res.ok) {
-        response = await res.json();
-      }
-    } catch (e) {
-      // API not available — simulate response
-    }
-
-    if (!response) {
-      // Simulated response for demo/offline mode
-      await sleep(800 + Math.random() * 1200);
-      response = simulateResponse(agent, message);
-    }
-
-    state.chatHistories[agent.id].push({
-      role: 'agent',
-      content: response.text || response.message || 'I received your message.',
-      tools_used: response.tools_used || [],
-      timestamp: Date.now(),
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, conversation_id: `chat_${agentId}` }),
     });
-
-    saveState();
-    renderChatMessages(agent.id);
-    addLog('info', `[${agent.name}] Chat: "${message.substring(0, 50)}..."`);
-
-  } catch (error) {
-    showToast('Error sending message', 'error');
-    console.error(error);
-  } finally {
-    sendBtn.disabled = false;
-    input.disabled = false;
-    input.focus();
+    const data = res.ok ? await res.json() : { text: 'Error connecting to server.' };
+    state.chatHistories[agentId].push({
+      role: 'agent', content: data.text || 'Received.',
+      tools_used: data.tools_used || [], timestamp: Date.now(),
+    });
+  } catch (e) {
+    const agent = state.agents.find(a => a.id === agentId);
+    state.chatHistories[agentId].push({
+      role: 'agent', content: simulateAgentResponse(agent, message), timestamp: Date.now(),
+    });
   }
+
+  saveState();
+  renderAgentChat(agentId);
+  document.getElementById('chat-send').disabled = false;
+  input.disabled = false;
+  input.focus();
 }
 
-function simulateResponse(agent, message) {
-  const msg = message.toLowerCase();
-
-  if (agent.template === 'trading') {
-    if (msg.includes('portfolio') || msg.includes('check')) {
-      return {
-        text: `📊 **Portfolio Status**\n\nConnected wallet: Not configured yet.\n\nTo connect your wallet and start monitoring, add your RPC endpoint in the agent config.\n\nI can monitor:\n- SOL balance and token holdings\n- Open positions and P&L\n- Price alerts on significant moves\n\nSet up your wallet first, then I'll run continuous monitoring.`,
-        tools_used: ['http_request'],
-      };
-    }
-    if (msg.includes('scan') || msg.includes('market')) {
-      return {
-        text: `🔍 **Market Scan**\n\nScanning pump.fun for opportunities matching your filters:\n- Dev Holding ≤5%\n- Top 10 Holders ≤20%\n- Insiders ≤20%\n- Token age ≤40min\n\nNo tokens currently match all criteria. The market is quiet.\nI'll alert you when a strong candidate appears.`,
-        tools_used: ['web_search', 'http_request'],
-      };
-    }
-    return {
-      text: `I'm your trading agent running the ${agent.model} model. I can:\n\n• **Check portfolio** — monitor balances and P&L\n• **Scan market** — find tokens matching the 10-point checklist\n• **Evaluate token** — run the full checklist on any token\n• **Detect rug-pulls** — analyze token safety\n\nWhat would you like me to do?`,
-      tools_used: [],
-    };
-  }
-
-  if (agent.template === 'research') {
-    return {
-      text: `🔬 I'm your research agent. I can help with:\n\n• **Daily briefings** — morning news digest on your topics\n• **Deep research** — thorough investigation of any topic\n• **Topic monitoring** — track developments over time\n\nWhat would you like me to research?`,
-      tools_used: msg.includes('search') || msg.includes('research') ? ['web_search'] : [],
-    };
-  }
-
-  // Generic response
-  return {
-    text: `I received your message: "${message}"\n\nI'm ${agent.name}, a ${agent.template} agent using ${agent.model}. I'm ready to help with tasks in my domain. What would you like me to do?`,
-    tools_used: [],
-  };
+function simulateAgentResponse(agent, message) {
+  if (!agent) return 'I received your message.';
+  return `I'm **${agent.name}** (${agent.template} agent on ${agent.model}). I received your message.\n\n_Connect an API key in Settings for real AI responses._`;
 }
 
 function handleChatKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendMessage();
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// AGENT HUB (group chat with all agents)
+// ═══════════════════════════════════════════════════════════
+
+function initHub() {
+  renderHubAgentList();
+  renderHubMessages();
+}
+
+function renderHubAgentList() {
+  const list = document.getElementById('hub-agent-list');
+  if (!list) return;
+
+  let html = `
+    <div class="hub-agent-item active" data-agent="jarvis">
+      <div class="hub-agent-avatar jarvis">⚡</div>
+      <div class="hub-agent-info">
+        <div class="hub-agent-name">Jarvis</div>
+        <div class="hub-agent-role">Orchestrator</div>
+      </div>
+      <span class="status-dot" style="color:var(--green)"></span>
+    </div>`;
+
+  state.agents.forEach(a => {
+    const icons = { trading: '💹', research: '🔬', content: '✍️', devops: '🛠️', support: '🎧', 'personal-assistant': '🧑‍💼', custom: '⚡' };
+    html += `
+      <div class="hub-agent-item" data-agent="${a.id}">
+        <div class="hub-agent-avatar agent">${icons[a.template] || '🤖'}</div>
+        <div class="hub-agent-info">
+          <div class="hub-agent-name">${a.name}</div>
+          <div class="hub-agent-role">${a.template}</div>
+        </div>
+        <span class="status-dot" style="color:${a.status === 'running' ? 'var(--green)' : 'var(--red)'}"></span>
+      </div>`;
+  });
+
+  list.innerHTML = html;
+}
+
+function renderHubMessages() {
+  const container = document.getElementById('hub-messages');
+  if (!container) return;
+
+  if (state.hubHistory.length === 0) {
+    container.innerHTML = `
+      <div class="hub-system-msg">
+        <span>🌐 Agent Hub — All agents communicate here. Send a message or watch them collaborate.</span>
+      </div>`;
+    return;
   }
+
+  container.innerHTML = state.hubHistory.map(m => {
+    if (m.type === 'system') {
+      return `<div class="hub-system-msg"><span>${m.content}</span></div>`;
+    }
+
+    const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const isUser = m.sender === 'You';
+    const isJarvis = m.sender === 'Jarvis';
+    const avatarClass = isJarvis ? 'jarvis' : 'agent';
+    const icon = m.icon || (isJarvis ? '⚡' : '👤');
+
+    return `
+      <div class="hub-msg ${isUser ? 'is-user' : ''} ${isJarvis ? 'is-jarvis' : ''}">
+        <div class="hub-msg-avatar ${avatarClass}">${icon}</div>
+        <div class="hub-msg-body">
+          <div class="hub-msg-header">
+            <span class="hub-msg-name">${m.sender}</span>
+            <span class="hub-msg-time">${time}</span>
+          </div>
+          <div class="hub-msg-text">${formatMessage(m.content)}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  container.scrollTop = container.scrollHeight;
+}
+
+function addHubSystemMessage(text) {
+  state.hubHistory.push({ type: 'system', content: text, timestamp: Date.now() });
+  saveState();
+  if (state.currentPage === 'hub') renderHubMessages();
+}
+
+async function sendHubMessage() {
+  const input = document.getElementById('hub-input');
+  const message = input?.value?.trim();
+  if (!message) return;
+
+  input.value = '';
+
+  // Add user message to hub
+  state.hubHistory.push({
+    sender: 'You', icon: '👤', content: message, timestamp: Date.now(),
+  });
+  saveState();
+  renderHubMessages();
+
+  // Jarvis responds in hub
+  try {
+    const res = await fetch(`${API_BASE}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `[Hub message from user]: ${message}`, conversation_id: 'hub_group' }),
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      state.hubHistory.push({
+        sender: 'Jarvis', icon: '⚡', content: data.text || 'Received.',
+        timestamp: Date.now(),
+      });
+    }
+  } catch (e) {
+    state.hubHistory.push({
+      sender: 'Jarvis', icon: '⚡',
+      content: `I'll coordinate with the agents on this. ${state.agents.length === 0 ? 'No agents created yet — want me to create one?' : ''}`,
+      timestamp: Date.now(),
+    });
+  }
+
+  saveState();
+  renderHubMessages();
+}
+
+function handleHubKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendHubMessage(); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHARED UTILITIES
+// ═══════════════════════════════════════════════════════════
+
+function formatMessage(text) {
+  return text
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;overflow-x:auto;margin:8px 0;font-family:JetBrains Mono,monospace;font-size:0.82rem">$2</pre>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code style="background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:3px;font-family:JetBrains Mono,monospace;font-size:0.85em">$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+function ensureStreamingBubble(container, text) {
+  let bubble = container.querySelector('.streaming-bubble');
+  if (!bubble) {
+    bubble = document.createElement('div');
+    bubble.className = 'chat-message agent streaming-bubble';
+    container.appendChild(bubble);
+  }
+  bubble.innerHTML = formatMessage(text) + '<span class="typing-cursor">▊</span>';
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeStreamingBubble(container) {
+  const bubble = container.querySelector('.streaming-bubble');
+  if (bubble) bubble.remove();
 }
 
 // ── Settings ────────────────────────────────────────────────
 
 function saveApiKey(provider) {
-  const inputId = `key-${provider}`;
-  const input = document.getElementById(inputId);
+  const input = document.getElementById(`key-${provider}`);
   if (!input) return;
-
   const value = input.value.trim();
-  if (!value && provider !== 'ollama') {
-    showToast(`Please enter a key for ${provider}`, 'error');
-    return;
-  }
 
   state.settings.apiKeys[provider] = value;
   saveState();
 
-  // Update status
+  // Also save to server
+  fetch(`${API_BASE}/api/settings/keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, key: value }),
+  }).catch(() => {});
+
   const statusEl = document.getElementById(`${provider}-status`);
-  if (statusEl) {
-    statusEl.textContent = '✅ Configured';
-    statusEl.style.color = 'var(--green)';
-  }
+  if (statusEl) { statusEl.textContent = '✅ Configured'; statusEl.style.color = 'var(--green)'; }
 
-  addLog('success', `API key saved for ${provider}`);
   showToast(`✅ ${provider} key saved`, 'success');
-
-  // Mask the input
-  if (value.length > 8) {
-    input.value = value.substring(0, 4) + '•'.repeat(value.length - 8) + value.substring(value.length - 4);
-  }
+  if (value.length > 8) input.value = value.substring(0, 4) + '•'.repeat(value.length - 8) + value.substring(value.length - 4);
 
   refreshDashboard();
 }
 
 function saveGeneralSettings() {
-  state.settings.agentName = document.getElementById('setting-agent-name').value;
   state.settings.defaultModel = document.getElementById('setting-default-model').value;
-  state.settings.port = parseInt(document.getElementById('setting-port').value) || 8080;
   state.settings.autoMemory = document.getElementById('setting-auto-memory').checked;
   saveState();
   showToast('✅ Settings saved', 'success');
 }
 
+// ── Plugins ─────────────────────────────────────────────────
+
+async function refreshPlugins() {
+  try {
+    const res = await fetch(`${API_BASE}/api/plugins`);
+    if (res.ok) {
+      const data = await res.json();
+      const list = document.getElementById('plugins-list');
+      if (data.plugins?.length) {
+        list.innerHTML = data.plugins.map(p => `
+          <div class="api-key-card">
+            <div class="provider-icon" style="background:rgba(34,197,94,0.15)">🔌</div>
+            <div class="provider-info">
+              <div class="provider-name">${p.name}</div>
+              <div class="provider-status" style="color:var(--text-muted)">${p.description}</div>
+            </div>
+            <span class="status status-running"><span class="status-dot"></span> loaded</span>
+          </div>
+        `).join('');
+      } else {
+        list.innerHTML = '<p style="color:var(--text-muted)">No plugins loaded. Add .py files to the plugins/ folder.</p>';
+      }
+    }
+  } catch (e) {}
+}
+
 // ── Logs ────────────────────────────────────────────────────
 
 function addLog(level, message) {
-  const now = new Date();
-  const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   state.logs.unshift({ time, level, message });
   if (state.logs.length > 200) state.logs = state.logs.slice(0, 200);
   saveState();
@@ -672,10 +843,9 @@ function addLog(level, message) {
 function refreshLogs() {
   const viewer = document.getElementById('log-viewer');
   if (state.logs.length === 0) {
-    viewer.innerHTML = '<span style="color:var(--text-muted)">No logs yet. Activity will appear here.</span>';
+    viewer.innerHTML = '<span style="color:var(--text-muted)">No logs yet.</span>';
     return;
   }
-
   viewer.innerHTML = state.logs.map(log => `
     <div class="log-line">
       <span class="log-time">${log.time}</span>
@@ -694,38 +864,47 @@ function clearLogs() {
 
 // ── Memory Search ───────────────────────────────────────────
 
-function searchMemory() {
-  const query = document.getElementById('memory-search').value.trim().toLowerCase();
+async function searchMemory() {
+  const query = document.getElementById('memory-search').value.trim();
   if (!query) return;
 
-  const results = [];
+  const container = document.getElementById('memory-results');
 
-  // Search chat histories
-  Object.entries(state.chatHistories).forEach(([agentId, messages]) => {
-    const agent = state.agents.find(a => a.id === agentId);
-    messages.forEach(m => {
-      if (m.content.toLowerCase().includes(query)) {
-        results.push({
-          agent: agent?.name || 'Unknown',
-          type: m.role === 'user' ? 'conversation' : 'response',
-          content: m.content,
-          time: new Date(m.timestamp).toLocaleString(),
-        });
+  // Try server-side search
+  try {
+    const res = await fetch(`${API_BASE}/api/memory/search?q=${encodeURIComponent(query)}&limit=20`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results?.length) {
+        container.innerHTML = data.results.map(r => `
+          <div style="padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px">
+            <div style="display:flex; justify-content:space-between; margin-bottom:4px">
+              <span style="font-weight:600; font-size:0.85rem">${r.type}</span>
+              <span style="color:var(--text-muted); font-size:0.75rem">relevance: ${r.relevance}</span>
+            </div>
+            <div style="font-size:0.85rem; color:var(--text-secondary)">${r.content.substring(0, 300)}${r.content.length > 300 ? '...' : ''}</div>
+          </div>
+        `).join('');
+        return;
       }
-    });
+    }
+  } catch (e) {}
+
+  // Local search fallback
+  const results = [];
+  state.jarvisHistory.forEach(m => {
+    if (m.content.toLowerCase().includes(query.toLowerCase())) {
+      results.push({ type: 'Jarvis chat', content: m.content, time: new Date(m.timestamp).toLocaleString() });
+    }
   });
 
-  const container = document.getElementById('memory-results');
   if (results.length === 0) {
     container.innerHTML = `<p style="color:var(--text-muted)">No results for "${query}"</p>`;
   } else {
     container.innerHTML = results.map(r => `
       <div style="padding:12px; border:1px solid var(--border); border-radius:var(--radius-sm); margin-bottom:8px">
-        <div style="display:flex; justify-content:space-between; margin-bottom:4px">
-          <span style="font-weight:600; font-size:0.85rem">${r.agent} — ${r.type}</span>
-          <span style="color:var(--text-muted); font-size:0.75rem">${r.time}</span>
-        </div>
-        <div style="font-size:0.85rem; color:var(--text-secondary)">${r.content.substring(0, 200)}${r.content.length > 200 ? '...' : ''}</div>
+        <span style="font-weight:600; font-size:0.85rem">${r.type}</span>
+        <div style="font-size:0.85rem; color:var(--text-secondary); margin-top:4px">${r.content.substring(0, 200)}</div>
       </div>
     `).join('');
   }
@@ -733,18 +912,14 @@ function searchMemory() {
 
 // ── Utilities ───────────────────────────────────────────────
 
-function generateId() {
-  return 'agent_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-}
-
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function timeSince(timestamp) {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
+function timeSince(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
 }
 
 function showToast(message, type = 'info') {
@@ -753,7 +928,6 @@ function showToast(message, type = 'info') {
   toast.className = `toast toast-${type}`;
   toast.innerHTML = message;
   container.appendChild(toast);
-
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(100px)';
@@ -768,12 +942,9 @@ refreshDashboard();
 addLog('info', 'Mission Control loaded');
 
 // Restore API key display
-['openai', 'anthropic', 'ollama', 'google'].forEach(provider => {
-  if (state.settings.apiKeys[provider]) {
-    const statusEl = document.getElementById(`${provider}-status`);
-    if (statusEl) {
-      statusEl.textContent = '✅ Configured';
-      statusEl.style.color = 'var(--green)';
-    }
+['openai', 'anthropic', 'ollama', 'google'].forEach(p => {
+  if (state.settings.apiKeys[p]) {
+    const el = document.getElementById(`${p}-status`);
+    if (el) { el.textContent = '✅ Configured'; el.style.color = 'var(--green)'; }
   }
 });

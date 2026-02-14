@@ -27,35 +27,36 @@
         <div class="nav-item active" data-page="dashboard">
           <span class="nav-icon">📊</span> Dashboard
         </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Chat</div>
+        <div class="nav-item" data-page="jarvis-chat">
+          <span class="nav-icon">⚡</span> Jarvis
+          <span class="badge" style="background:var(--green)">online</span>
+        </div>
         <div class="nav-item" data-page="agents">
           <span class="nav-icon">🤖</span> Agents
           <span class="badge" id="agent-count-badge">0</span>
         </div>
-      </div>
-
-      <div class="nav-section">
-        <div class="nav-section-title">Workspace</div>
-        <div class="nav-item" data-page="chat">
-          <span class="nav-icon">💬</span> Chat
-        </div>
-        <div class="nav-item" data-page="logs">
-          <span class="nav-icon">📋</span> Logs
-        </div>
-        <div class="nav-item" data-page="memory">
-          <span class="nav-icon">🧠</span> Memory
+        <div class="nav-item" data-page="hub">
+          <span class="nav-icon">🌐</span> Agent Hub
         </div>
       </div>
 
       <div class="nav-section">
         <div class="nav-section-title">System</div>
+        <div class="nav-item" data-page="memory">
+          <span class="nav-icon">🧠</span> Memory
+        </div>
+        <div class="nav-item" data-page="logs">
+          <span class="nav-icon">📋</span> Logs
+        </div>
         <div class="nav-item" data-page="settings">
           <span class="nav-icon">⚙️</span> Settings
         </div>
         <div class="nav-item" data-page="plugins">
           <span class="nav-icon">🔌</span> Plugins
-        </div>
-        <div class="nav-item" data-page="help">
-          <span class="nav-icon">❓</span> Help
         </div>
       </div>
     </nav>
@@ -69,14 +70,19 @@
       <div class="main-header">
         <h2>Dashboard</h2>
         <div class="header-actions">
-          <button class="btn btn-primary" onclick="openNewAgentModal()">
-            ➕ New Agent
+          <button class="btn btn-primary" onclick="navigateTo('jarvis-chat')">
+            ⚡ Chat with Jarvis
           </button>
         </div>
       </div>
       <div class="page-content fade-in">
         <!-- Stats -->
         <div class="grid grid-4" style="margin-bottom: 24px">
+          <div class="stat-card clickable" onclick="navigateTo('jarvis-chat')">
+            <div class="stat-label">Jarvis</div>
+            <div class="stat-value" style="font-size:1.4rem; color:var(--green)">● Online</div>
+            <div class="stat-change positive">Ready to chat</div>
+          </div>
           <div class="stat-card">
             <div class="stat-label">Active Agents</div>
             <div class="stat-value" id="stat-active">0</div>
@@ -88,14 +94,33 @@
             <div class="stat-change">Conversations + knowledge</div>
           </div>
           <div class="stat-card">
-            <div class="stat-label">Tools Available</div>
-            <div class="stat-value" id="stat-tools">8</div>
-            <div class="stat-change">Built-in tools</div>
-          </div>
-          <div class="stat-card">
             <div class="stat-label">LLM Provider</div>
             <div class="stat-value" id="stat-provider" style="font-size:1.2rem">Not configured</div>
             <div class="stat-change" id="stat-model-note">Set up in Settings</div>
+          </div>
+        </div>
+
+        <!-- Quick actions -->
+        <div class="card" style="margin-bottom:24px">
+          <div class="card-header">
+            <h3 class="card-title">Quick Start</h3>
+          </div>
+          <div class="grid grid-3">
+            <div class="quick-action" onclick="navigateTo('jarvis-chat')">
+              <div class="quick-action-icon">💬</div>
+              <div class="quick-action-title">Chat with Jarvis</div>
+              <div class="quick-action-desc">Ask anything, create agents, get help</div>
+            </div>
+            <div class="quick-action" onclick="openNewAgentModal()">
+              <div class="quick-action-icon">🤖</div>
+              <div class="quick-action-title">Create Agent</div>
+              <div class="quick-action-desc">Spawn a specialized AI agent</div>
+            </div>
+            <div class="quick-action" onclick="navigateTo('hub')">
+              <div class="quick-action-icon">🌐</div>
+              <div class="quick-action-title">Agent Hub</div>
+              <div class="quick-action-desc">Watch agents collaborate</div>
+            </div>
           </div>
         </div>
 
@@ -106,12 +131,43 @@
             <button class="btn btn-secondary btn-sm" onclick="openNewAgentModal()">Create New</button>
           </div>
           <div id="dashboard-agents-list">
-            <div class="empty-state">
-              <div class="empty-icon">🤖</div>
-              <h3>No agents yet</h3>
-              <p>Create your first AI agent to get started.</p>
-              <button class="btn btn-primary" onclick="openNewAgentModal()">➕ Create Agent</button>
+            <div class="empty-state" style="padding:30px">
+              <p style="color:var(--text-muted)">No agents yet. Chat with Jarvis and ask him to create one, or use the Create Agent button.</p>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ JARVIS CHAT PAGE (Always available) ════════ -->
+    <div id="page-jarvis-chat" class="page hidden">
+      <div class="main-header">
+        <h2>⚡ Jarvis</h2>
+        <div class="header-actions">
+          <span class="status status-running" id="jarvis-connection-status">
+            <span class="status-dot"></span>
+            Connected
+          </span>
+        </div>
+      </div>
+      <div class="page-content" style="padding:0 0 0 0; height:calc(100vh - var(--header-h))">
+        <div class="chat-container" style="height:100%; border:none; border-radius:0">
+          <div class="chat-messages" id="jarvis-messages">
+            <div class="jarvis-welcome">
+              <div class="jarvis-welcome-icon">⚡</div>
+              <h2>Hey, I'm Jarvis</h2>
+              <p>Your AI operating system. I can help you with anything — ask me questions, create agents, search the web, write code, or just chat.</p>
+              <div class="jarvis-suggestions">
+                <button class="suggestion-chip" onclick="sendJarvisMessage('What can you do?')">What can you do?</button>
+                <button class="suggestion-chip" onclick="sendJarvisMessage('Create a trading agent for crypto')">Create a trading agent</button>
+                <button class="suggestion-chip" onclick="sendJarvisMessage('Search the web for the latest AI news')">Search latest AI news</button>
+                <button class="suggestion-chip" onclick="sendJarvisMessage('Help me write a Python script')">Help me write code</button>
+              </div>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <textarea id="jarvis-input" placeholder="Message Jarvis..." rows="1" onkeydown="handleJarvisKey(event)"></textarea>
+            <button class="chat-send-btn" id="jarvis-send" onclick="sendJarvisMessage()">↑</button>
           </div>
         </div>
       </div>
@@ -120,7 +176,7 @@
     <!-- ════════ AGENTS PAGE ════════ -->
     <div id="page-agents" class="page hidden">
       <div class="main-header">
-        <h2>Agents</h2>
+        <h2>🤖 Agents</h2>
         <div class="header-actions">
           <button class="btn btn-primary" onclick="openNewAgentModal()">➕ New Agent</button>
         </div>
@@ -132,28 +188,63 @@
       </div>
     </div>
 
-    <!-- ════════ CHAT PAGE ════════ -->
+    <!-- ════════ AGENT CHAT PAGE ════════ -->
     <div id="page-chat" class="page hidden">
       <div class="main-header">
-        <h2>💬 Chat — <span id="chat-agent-name">Select an agent</span></h2>
+        <h2>💬 <span id="chat-agent-name">Agent</span></h2>
         <div class="header-actions">
-          <select class="form-select" id="chat-agent-select" onchange="switchChatAgent(this.value)" style="width:200px">
-            <option value="">Select agent...</option>
-          </select>
+          <button class="btn btn-secondary btn-sm" onclick="navigateTo('agents')">← Back to Agents</button>
         </div>
       </div>
-      <div class="page-content" style="padding:16px 32px 32px">
-        <div class="chat-container">
-          <div class="chat-messages" id="chat-messages">
-            <div class="empty-state">
-              <div class="empty-icon">💬</div>
-              <h3>Start a conversation</h3>
-              <p>Select an agent above to begin chatting.</p>
+      <div class="page-content" style="padding:0; height:calc(100vh - var(--header-h))">
+        <div class="chat-container" style="height:100%; border:none; border-radius:0">
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-input-area">
+            <textarea id="chat-input" placeholder="Type a message..." rows="1" onkeydown="handleChatKey(event)"></textarea>
+            <button class="chat-send-btn" id="chat-send" onclick="sendMessage()">↑</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ AGENT HUB PAGE ════════ -->
+    <div id="page-hub" class="page hidden">
+      <div class="main-header">
+        <h2>🌐 Agent Hub</h2>
+        <div class="header-actions">
+          <span class="status status-running"><span class="status-dot"></span> Live</span>
+        </div>
+      </div>
+      <div class="page-content" style="padding:0; height:calc(100vh - var(--header-h))">
+        <div class="hub-layout">
+          <!-- Agent sidebar -->
+          <div class="hub-agents">
+            <div class="hub-agents-header">
+              <h3>Participants</h3>
+            </div>
+            <div class="hub-agent-list" id="hub-agent-list">
+              <div class="hub-agent-item active" data-agent="jarvis">
+                <div class="hub-agent-avatar jarvis">⚡</div>
+                <div class="hub-agent-info">
+                  <div class="hub-agent-name">Jarvis</div>
+                  <div class="hub-agent-role">Orchestrator</div>
+                </div>
+                <span class="status-dot" style="color:var(--green)"></span>
+              </div>
+              <!-- Dynamic agents added here -->
             </div>
           </div>
-          <div class="chat-input-area">
-            <textarea id="chat-input" placeholder="Type a message..." rows="1" onkeydown="handleChatKey(event)" disabled></textarea>
-            <button class="chat-send-btn" id="chat-send" onclick="sendMessage()" disabled>→</button>
+          <!-- Group chat -->
+          <div class="hub-chat">
+            <div class="hub-messages" id="hub-messages">
+              <div class="hub-system-msg">
+                <span>🌐 Agent Hub — All agents can communicate here. Jarvis orchestrates.</span>
+              </div>
+            </div>
+            <div class="chat-input-area">
+              <textarea id="hub-input" placeholder="Message the group..." rows="1" onkeydown="handleHubKey(event)"></textarea>
+              <button class="chat-send-btn" onclick="sendHubMessage()">↑</button>
+            </div>
           </div>
         </div>
       </div>
@@ -168,9 +259,7 @@
         </div>
       </div>
       <div class="page-content fade-in">
-        <div class="log-viewer" id="log-viewer">
-          <!-- Populated by JS -->
-        </div>
+        <div class="log-viewer" id="log-viewer"></div>
       </div>
     </div>
 
@@ -185,7 +274,7 @@
             <h3 class="card-title">Search Memory</h3>
           </div>
           <div class="form-input-group" style="margin-bottom: 20px">
-            <input type="text" class="form-input" id="memory-search" placeholder="Search knowledge, conversations...">
+            <input type="text" class="form-input" id="memory-search" placeholder="Search knowledge, conversations..." onkeydown="if(event.key==='Enter')searchMemory()">
             <button class="btn btn-primary" onclick="searchMemory()">Search</button>
           </div>
           <div id="memory-results">
@@ -210,10 +299,9 @@
         <!-- API Keys Tab -->
         <div id="tab-api-keys" class="tab-content">
           <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem">
-            Configure your LLM provider API keys. Each agent can use a different provider.
+            Configure your LLM provider API keys. Keys are saved to .env on the server.
           </p>
 
-          <!-- OpenAI -->
           <div class="api-key-card">
             <div class="provider-icon" style="background: rgba(0,166,126,0.15)">🟢</div>
             <div class="provider-info">
@@ -224,7 +312,6 @@
             <button class="btn btn-secondary btn-sm" onclick="saveApiKey('openai')">Save</button>
           </div>
 
-          <!-- Anthropic -->
           <div class="api-key-card">
             <div class="provider-icon" style="background: rgba(204,120,50,0.15)">🟠</div>
             <div class="provider-info">
@@ -235,7 +322,6 @@
             <button class="btn btn-secondary btn-sm" onclick="saveApiKey('anthropic')">Save</button>
           </div>
 
-          <!-- Ollama -->
           <div class="api-key-card">
             <div class="provider-icon" style="background: rgba(99,102,241,0.15)">🟣</div>
             <div class="provider-info">
@@ -246,7 +332,6 @@
             <button class="btn btn-secondary btn-sm" onclick="saveApiKey('ollama')">Test</button>
           </div>
 
-          <!-- Google -->
           <div class="api-key-card">
             <div class="provider-icon" style="background: rgba(66,133,244,0.15)">🔵</div>
             <div class="provider-info">
@@ -262,43 +347,24 @@
         <div id="tab-general" class="tab-content hidden">
           <div class="card" style="max-width:600px">
             <div class="form-group">
-              <label class="form-label">Default Agent Name</label>
-              <input type="text" class="form-input" id="setting-agent-name" value="Jarvis">
-            </div>
-            <div class="form-group">
               <label class="form-label">Default Model</label>
               <select class="form-select" id="setting-default-model">
                 <optgroup label="OpenAI — GPT-5">
                   <option value="gpt-5.2">GPT-5.2</option>
-                  <option value="gpt-5.2-pro">GPT-5.2 Pro</option>
                   <option value="gpt-5.1">GPT-5.1</option>
-                  <option value="gpt-5">GPT-5</option>
                   <option value="gpt-5-mini">GPT-5 Mini</option>
-                </optgroup>
-                <optgroup label="OpenAI — Reasoning">
-                  <option value="o4-mini">o4-mini</option>
-                  <option value="o3-pro">o3-pro</option>
-                  <option value="o3">o3</option>
                 </optgroup>
                 <optgroup label="Anthropic">
                   <option value="claude-opus-4-6">Claude Opus 4.6</option>
                   <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
-                  <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
                 </optgroup>
                 <optgroup label="Google">
                   <option value="gemini-3-pro">Gemini 3 Pro</option>
-                  <option value="gemini-3-flash">Gemini 3 Flash</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                 </optgroup>
                 <optgroup label="Ollama (Free)">
                   <option value="llama3.1">Llama 3.1</option>
-                  <option value="mistral">Mistral</option>
                 </optgroup>
               </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Server Port</label>
-              <input type="number" class="form-input" id="setting-port" value="8080" style="max-width:120px">
             </div>
             <div class="form-group">
               <label class="toggle">
@@ -317,49 +383,26 @@
             <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
               <div style="display:flex; align-items:center; gap:12px">
                 <div class="provider-icon" style="background:rgba(74,21,75,0.2)">💬</div>
-                <div>
-                  <div class="provider-name">Slack</div>
-                  <div class="provider-status" style="color:var(--text-muted)">Bot token for messaging</div>
-                </div>
+                <div><div class="provider-name">Slack</div><div class="provider-status" style="color:var(--text-muted)">Bot token</div></div>
               </div>
               <input type="password" class="form-input" id="key-slack" placeholder="xoxb-..." style="width:100%">
               <button class="btn btn-secondary btn-sm" onclick="saveApiKey('slack')">Save</button>
             </div>
-
             <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
               <div style="display:flex; align-items:center; gap:12px">
                 <div class="provider-icon" style="background:rgba(29,161,242,0.15)">🐦</div>
-                <div>
-                  <div class="provider-name">Twitter / X</div>
-                  <div class="provider-status" style="color:var(--text-muted)">For social media agents</div>
-                </div>
+                <div><div class="provider-name">Twitter / X</div><div class="provider-status" style="color:var(--text-muted)">API key</div></div>
               </div>
               <input type="password" class="form-input" id="key-twitter" placeholder="API key..." style="width:100%">
               <button class="btn btn-secondary btn-sm" onclick="saveApiKey('twitter')">Save</button>
             </div>
-
             <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
               <div style="display:flex; align-items:center; gap:12px">
                 <div class="provider-icon" style="background:rgba(255,255,255,0.08)">🐙</div>
-                <div>
-                  <div class="provider-name">GitHub</div>
-                  <div class="provider-status" style="color:var(--text-muted)">Personal access token</div>
-                </div>
+                <div><div class="provider-name">GitHub</div><div class="provider-status" style="color:var(--text-muted)">Token</div></div>
               </div>
               <input type="password" class="form-input" id="key-github" placeholder="ghp_..." style="width:100%">
               <button class="btn btn-secondary btn-sm" onclick="saveApiKey('github')">Save</button>
-            </div>
-
-            <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
-              <div style="display:flex; align-items:center; gap:12px">
-                <div class="provider-icon" style="background:rgba(99,102,241,0.15)">📧</div>
-                <div>
-                  <div class="provider-name">Email (SMTP)</div>
-                  <div class="provider-status" style="color:var(--text-muted)">For email notifications</div>
-                </div>
-              </div>
-              <input type="text" class="form-input" id="key-email" placeholder="smtp://user:pass@host:587" style="width:100%">
-              <button class="btn btn-secondary btn-sm" onclick="saveApiKey('email')">Save</button>
             </div>
           </div>
         </div>
@@ -374,129 +417,25 @@
       <div class="page-content fade-in">
         <div class="card" style="margin-bottom: 20px">
           <div class="card-header">
-            <h3 class="card-title">Custom Tools</h3>
+            <h3 class="card-title">Loaded Plugins</h3>
           </div>
-          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem">
-            Add custom tools by dropping Python files into the <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">plugins/</code> folder.
-            Each plugin is automatically loaded when Jarvis starts.
-          </p>
-          <div id="plugins-list">
-            <div class="api-key-card">
-              <div class="provider-icon" style="background:rgba(34,197,94,0.15)">🌤️</div>
-              <div class="provider-info">
-                <div class="provider-name">get_weather</div>
-                <div class="provider-status" style="color:var(--text-muted)">Get current weather for a city</div>
-              </div>
-              <span class="status status-running"><span class="status-dot"></span> loaded</span>
-            </div>
-            <div class="api-key-card">
-              <div class="provider-icon" style="background:rgba(245,158,11,0.15)">💰</div>
-              <div class="provider-info">
-                <div class="provider-name">get_crypto_price</div>
-                <div class="provider-status" style="color:var(--text-muted)">Get cryptocurrency price in USD</div>
-              </div>
-              <span class="status status-running"><span class="status-dot"></span> loaded</span>
-            </div>
-          </div>
+          <div id="plugins-list"></div>
         </div>
         <div class="card">
           <div class="card-header">
             <h3 class="card-title">Create a Plugin</h3>
           </div>
-          <div class="log-viewer" style="max-height:260px">
+          <div class="log-viewer" style="max-height:200px">
 <span style="color:var(--text-muted)"># plugins/my_tool.py</span>
 <span style="color:var(--cyan)">from</span> jarvis.plugins <span style="color:var(--cyan)">import</span> plugin_tool
 
 <span style="color:var(--green)">@plugin_tool(</span>
-    name=<span style="color:var(--orange)">"my_custom_tool"</span>,
-    description=<span style="color:var(--orange)">"What this tool does"</span>,
-    parameters={<span style="color:var(--orange)">"input"</span>: <span style="color:var(--orange)">"Description of input"</span>}
+    name=<span style="color:var(--orange)">"my_tool"</span>,
+    description=<span style="color:var(--orange)">"What it does"</span>,
+    parameters={<span style="color:var(--orange)">"input"</span>: <span style="color:var(--orange)">"Description"</span>}
 <span style="color:var(--green)">)</span>
-<span style="color:var(--cyan)">async def</span> <span style="color:var(--accent)">my_custom_tool</span>(input: str) -> str:
-    <span style="color:var(--text-muted)"># Your code here</span>
+<span style="color:var(--cyan)">async def</span> <span style="color:var(--accent)">my_tool</span>(input: str) -> str:
     <span style="color:var(--cyan)">return</span> f<span style="color:var(--orange)">"Result: {input}"</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ════════ HELP PAGE ════════ -->
-    <div id="page-help" class="page hidden">
-      <div class="main-header">
-        <h2>❓ Help & FAQ</h2>
-      </div>
-      <div class="page-content fade-in" style="max-width:800px">
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">🚀 How do I get started?</h3>
-          <div class="faq-answer" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <ol style="padding-left:20px; display:flex; flex-direction:column; gap:8px">
-              <li><strong>Settings → API Keys</strong> — Enter your API key (OpenAI, Anthropic, or use Ollama for free)</li>
-              <li><strong>Dashboard → New Agent</strong> — Pick a template and model</li>
-              <li><strong>Chat</strong> — Start talking to your agent!</li>
-            </ol>
-          </div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">💰 Which model is cheapest?</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <p><strong>Free:</strong> Ollama with Llama 3 — runs locally on your computer, no API costs.</p>
-            <p style="margin-top:8px"><strong>Cheapest paid:</strong> GPT-4o Mini (~$0.001/message) or Claude Haiku (~$0.001/message).</p>
-            <p style="margin-top:8px"><strong>Best quality:</strong> GPT-4o or Claude Sonnet (~$0.01/message).</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">🌐 How do I access this from another computer?</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <p>If Jarvis runs on a VPS/server, you have 3 options:</p>
-            <ol style="padding-left:20px; margin-top:8px; display:flex; flex-direction:column; gap:6px">
-              <li><strong>SSH Tunnel</strong> (simplest): <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">ssh -L 8080:localhost:8080 user@your-server</code> then open localhost:8080</li>
-              <li><strong>Nginx + SSL</strong> (professional): Point a domain, get free HTTPS via Let's Encrypt</li>
-              <li><strong>Cloudflare Tunnel</strong> (no ports): Zero port forwarding needed, free SSL</li>
-            </ol>
-            <p style="margin-top:8px">See the full <strong>VPS Deploy Guide</strong> in docs/VPS_DEPLOY.md</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">🔌 How do I add custom tools?</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <p>Drop a Python file in the <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">plugins/</code> folder with the <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">@plugin_tool</code> decorator. See the Plugins page for examples.</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">🤖 Can different agents use different models?</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <p>Yes! When creating an agent, pick any model from the dropdown. You can have a trading bot on GPT-4o and a research agent on Claude, running simultaneously.</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">📊 Is my data safe?</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <p>Everything runs on your own machine or VPS. No data is sent to us. Your conversations, memory, and API keys stay local. With Ollama, even the AI runs locally — 100% offline capable.</p>
-          </div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">🔄 How do I update?</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <p><code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">cd jarvis-os && git pull && docker compose up -d --build</code></p>
-            <p style="margin-top:8px">Your data and configuration are preserved between updates.</p>
-          </div>
-        </div>
-
-        <div class="card" style="cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
-          <h3 class="card-title">🆘 Something's not working</h3>
-          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
-            <ol style="padding-left:20px; display:flex; flex-direction:column; gap:6px">
-              <li>Check the <strong>Logs</strong> page for error messages</li>
-              <li>Run <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">docker compose logs -f</code> for detailed output</li>
-              <li>Verify your API key is valid in Settings</li>
-              <li>Restart: <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">docker compose restart</code></li>
-            </ol>
           </div>
         </div>
       </div>
@@ -509,7 +448,7 @@
 <div class="modal-overlay" id="new-agent-modal">
   <div class="modal">
     <h3 class="modal-title">Create New Agent</h3>
-    <p class="modal-subtitle">Choose a template and configure your agent.</p>
+    <p class="modal-subtitle">Choose a template and model for your agent.</p>
 
     <div class="form-group">
       <label class="form-label">Agent Name</label>
@@ -522,42 +461,37 @@
         <div class="template-option selected" data-template="trading">
           <div class="template-icon">💹</div>
           <div class="template-name">Trading</div>
-          <div class="template-desc">Crypto trading & analysis</div>
+          <div class="template-desc">Crypto & analysis</div>
         </div>
         <div class="template-option" data-template="research">
           <div class="template-icon">🔬</div>
           <div class="template-name">Research</div>
-          <div class="template-desc">Web research & briefings</div>
+          <div class="template-desc">Deep research</div>
         </div>
         <div class="template-option" data-template="content">
           <div class="template-icon">✍️</div>
           <div class="template-name">Content</div>
-          <div class="template-desc">Social media & writing</div>
-        </div>
-        <div class="template-option" data-template="social-media">
-          <div class="template-icon">📱</div>
-          <div class="template-name">Social Media</div>
-          <div class="template-desc">Twitter/X growth</div>
-        </div>
-        <div class="template-option" data-template="support">
-          <div class="template-icon">🎧</div>
-          <div class="template-name">Support</div>
-          <div class="template-desc">Customer support bot</div>
+          <div class="template-desc">Writing & social</div>
         </div>
         <div class="template-option" data-template="devops">
           <div class="template-icon">🛠️</div>
           <div class="template-name">DevOps</div>
-          <div class="template-desc">Infrastructure & monitoring</div>
+          <div class="template-desc">Infra & monitoring</div>
+        </div>
+        <div class="template-option" data-template="support">
+          <div class="template-icon">🎧</div>
+          <div class="template-name">Support</div>
+          <div class="template-desc">Customer support</div>
         </div>
         <div class="template-option" data-template="personal-assistant">
           <div class="template-icon">🧑‍💼</div>
           <div class="template-name">Assistant</div>
-          <div class="template-desc">Personal AI assistant</div>
+          <div class="template-desc">Personal AI</div>
         </div>
         <div class="template-option" data-template="custom">
           <div class="template-icon">⚡</div>
           <div class="template-name">Custom</div>
-          <div class="template-desc">Build from scratch</div>
+          <div class="template-desc">From scratch</div>
         </div>
       </div>
     </div>
@@ -565,60 +499,34 @@
     <div class="form-group">
       <label class="form-label">LLM Model</label>
       <select class="form-select" id="new-agent-model">
-        <optgroup label="OpenAI — GPT-5 (Latest)">
-          <option value="gpt-5.2" selected>GPT-5.2 — Latest, most capable</option>
-          <option value="gpt-5.2-pro">GPT-5.2 Pro — Enhanced quality</option>
-          <option value="gpt-5.1">GPT-5.1 — Excellent quality</option>
-          <option value="gpt-5">GPT-5 — Great all-rounder</option>
-          <option value="gpt-5-mini">GPT-5 Mini — Fast & affordable</option>
-          <option value="gpt-5-nano">GPT-5 Nano — Fastest, lowest cost</option>
-        </optgroup>
-        <optgroup label="OpenAI — Codex">
-          <option value="gpt-5.2-codex">GPT-5.2 Codex — Best for code</option>
-          <option value="gpt-5.1-codex-max">GPT-5.1 Codex Max — Max context</option>
+        <optgroup label="OpenAI — GPT-5">
+          <option value="gpt-5.2" selected>GPT-5.2 — Latest</option>
+          <option value="gpt-5.1">GPT-5.1</option>
+          <option value="gpt-5-mini">GPT-5 Mini — Fast</option>
         </optgroup>
         <optgroup label="OpenAI — Reasoning">
-          <option value="o4-mini">o4-mini — Latest reasoning</option>
-          <option value="o3-pro">o3-pro — Most powerful reasoning</option>
-          <option value="o3">o3 — Advanced reasoning</option>
-          <option value="o3-mini">o3-mini — Faster reasoning</option>
+          <option value="o4-mini">o4-mini</option>
+          <option value="o3-pro">o3-pro</option>
         </optgroup>
-        <optgroup label="OpenAI — Previous Gen">
-          <option value="gpt-4.1">GPT-4.1</option>
-          <option value="gpt-4o">GPT-4o</option>
-        </optgroup>
-        <optgroup label="Anthropic — Opus">
-          <option value="claude-opus-4-6">Claude Opus 4.6 — Latest, most capable</option>
-          <option value="claude-opus-4-5-20251101">Claude Opus 4.5</option>
-        </optgroup>
-        <optgroup label="Anthropic — Sonnet">
-          <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5 — Best balance</option>
-          <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-        </optgroup>
-        <optgroup label="Anthropic — Haiku">
-          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — Fastest</option>
+        <optgroup label="Anthropic">
+          <option value="claude-opus-4-6">Claude Opus 4.6</option>
+          <option value="claude-sonnet-4-5-20250929">Claude Sonnet 4.5</option>
+          <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
         </optgroup>
         <optgroup label="Google">
-          <option value="gemini-3-pro">Gemini 3 Pro — Latest, most capable</option>
-          <option value="gemini-3-flash">Gemini 3 Flash — Latest, fast</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro — Proven quality</option>
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash — Great value</option>
-          <option value="gemini-2.0-flash">Gemini 2.0 Flash — Budget friendly</option>
+          <option value="gemini-3-pro">Gemini 3 Pro</option>
+          <option value="gemini-3-flash">Gemini 3 Flash</option>
         </optgroup>
-        <optgroup label="Ollama (Local — Free)">
-          <option value="llama3.1">Llama 3.1 8B — Best open-source</option>
-          <option value="llama3.1:70b">Llama 3.1 70B — Near GPT-4</option>
-          <option value="mistral">Mistral 7B — Fast general</option>
-          <option value="deepseek-coder-v2">DeepSeek Coder V2 — Best for code</option>
-          <option value="phi3:mini">Phi-3 Mini — Smallest (4GB RAM)</option>
+        <optgroup label="Ollama (Free)">
+          <option value="llama3.1">Llama 3.1 8B</option>
+          <option value="mistral">Mistral 7B</option>
         </optgroup>
       </select>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Personality</label>
+      <label class="form-label">Personality (optional)</label>
       <textarea class="form-textarea" id="new-agent-personality" rows="2" placeholder="Describe how the agent should behave..."></textarea>
-      <div class="form-hint">Leave blank to use template default.</div>
     </div>
 
     <div class="modal-actions">
@@ -628,7 +536,6 @@
   </div>
 </div>
 
-<!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
 <script src="/static/js/app.js"></script>
