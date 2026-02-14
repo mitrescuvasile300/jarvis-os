@@ -1,10 +1,7 @@
 #!/bin/bash
-# ═══════════════════════════════════════════════════════════════
-# Jarvis OS — One-Line Installer
-#
+# Jarvis OS - One-Line Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/mitrescuvasile300/jarvis-os/main/install.sh | bash
 #   or:  bash install.sh
-# ═══════════════════════════════════════════════════════════════
 
 set -e
 
@@ -18,25 +15,34 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
-# ── Input helpers (work with curl | bash) ─────────────────────
+# --- Detect usable terminal ---
+HAS_TTY=false
+if [ -t 0 ]; then
+  HAS_TTY=true
+elif (echo "" > /dev/tty) 2>/dev/null; then
+  HAS_TTY=true
+fi
 
+# --- Input helper: prompt with default ---
 ask() {
   local prompt="$1"
   local default="$2"
   local REPLY=""
+
   if [ -t 0 ]; then
     read -p "$prompt" REPLY
-  elif [ -e /dev/tty ]; then
+  elif [ "$HAS_TTY" = true ]; then
     read -p "$prompt" REPLY < /dev/tty
   else
-    # Non-interactive (CI) — use default
+    printf "%s%s\n" "$prompt" "$default"
     REPLY="$default"
   fi
+
   [ -z "$REPLY" ] && [ -n "$default" ] && REPLY="$default"
   echo "$REPLY"
 }
 
-# Read API key with asterisk feedback
+# --- Input helper: API key with asterisk feedback ---
 ask_key() {
   local prompt="$1"
   local key=""
@@ -44,16 +50,24 @@ ask_key() {
 
   printf "%s" "$prompt"
 
+  # Non-interactive: read whole line from stdin
+  if [ "$HAS_TTY" = false ] && ! [ -t 0 ]; then
+    read -r key 2>/dev/null || true
+    [ -n "$key" ] && printf '%*s' "${#key}" '' | tr ' ' '*'
+    echo "" >&2
+    echo "$key"
+    return
+  fi
+
+  # Interactive: read char by char with asterisks
   while true; do
     if [ -t 0 ]; then
       IFS= read -rsn1 char
-    elif [ -e /dev/tty ]; then
-      IFS= read -rsn1 char < /dev/tty
     else
-      break  # Non-interactive, skip key input
+      IFS= read -rsn1 char < /dev/tty
     fi
 
-    # Enter pressed
+    # Enter
     if [[ "$char" == "" ]]; then
       break
     fi
@@ -75,16 +89,23 @@ ask_key() {
   echo "$key"
 }
 
+# --- Mask API key for display ---
 mask_key() {
   local key="$1"
   local len=${#key}
   if [ $len -le 8 ]; then
-    echo "••••••••"
+    echo "********"
   else
-    echo "${key:0:5}$( printf '•%.0s' $(seq 1 $((len - 9))) )${key: -4}"
+    local mid=$((len - 9))
+    local dots=""
+    for i in $(seq 1 $mid); do dots="${dots}*"; done
+    echo "${key:0:5}${dots}${key: -4}"
   fi
 }
 
+# =========================================
+# Banner
+# =========================================
 clear 2>/dev/null || true
 echo ""
 echo -e "${BLUE}"
@@ -98,17 +119,17 @@ cat << 'LOGO'
 LOGO
 echo -e "${NC}"
 echo -e "  ${BOLD}Your Personal AI Operating System${NC}"
-echo -e "  ${DIM}─────────────────────────────────────────${NC}"
+echo -e "  ${DIM}------------------------------------------${NC}"
 echo ""
 
-# ═══════════════════════════════════════════════
+# =========================================
 # Step 1: Check Docker
-# ═══════════════════════════════════════════════
+# =========================================
 echo -e "${CYAN}[1/5]${NC} ${BOLD}Checking requirements...${NC}"
 echo ""
 
 if ! command -v docker &> /dev/null; then
-    echo -e "  ${RED}✗ Docker is not installed${NC}"
+    echo -e "  ${RED}x Docker is not installed${NC}"
     echo ""
     echo "  Install Docker first:"
     echo -e "    macOS:   ${BOLD}brew install --cask docker${NC}"
@@ -119,18 +140,18 @@ if ! command -v docker &> /dev/null; then
 fi
 
 DOCKER_VER=$(docker --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' || echo "?")
-echo -e "  ${GREEN}✓${NC} Docker v${DOCKER_VER}"
+echo -e "  ${GREEN}ok${NC} Docker v${DOCKER_VER}"
 
 if ! docker compose version &> /dev/null 2>&1; then
-    echo -e "  ${RED}✗ Docker Compose not found${NC}"
+    echo -e "  ${RED}x Docker Compose not found${NC}"
     exit 1
 fi
-echo -e "  ${GREEN}✓${NC} Docker Compose"
+echo -e "  ${GREEN}ok${NC} Docker Compose"
 echo ""
 
-# ═══════════════════════════════════════════════
+# =========================================
 # Step 2: Download
-# ═══════════════════════════════════════════════
+# =========================================
 echo -e "${CYAN}[2/5]${NC} ${BOLD}Downloading Jarvis OS...${NC}"
 echo ""
 
@@ -139,7 +160,7 @@ if [ -d "jarvis-os" ]; then
     cd jarvis-os && git pull --quiet 2>/dev/null || true && cd ..
 else
     git clone --quiet https://github.com/mitrescuvasile300/jarvis-os.git 2>/dev/null || {
-        echo -e "  ${RED}✗ Failed to download. Check your internet connection.${NC}"
+        echo -e "  ${RED}x Failed to download. Check your connection.${NC}"
         exit 1
     }
 fi
@@ -149,35 +170,33 @@ if [ ! -f .env ]; then
     cp .env.example .env
 fi
 
-echo -e "  ${GREEN}✓${NC} Downloaded"
+echo -e "  ${GREEN}ok${NC} Downloaded"
 echo ""
 
-# ═══════════════════════════════════════════════
+# =========================================
 # Step 3: Configure
-# ═══════════════════════════════════════════════
+# =========================================
 echo -e "${CYAN}[3/5]${NC} ${BOLD}Let's configure your agent${NC}"
 echo ""
 
-# ── 3a: Agent Name ──
+# --- 3a: Agent Name ---
 echo -e "  ${BOLD}What should your AI agent be called?${NC}"
 AGENT_NAME=$(ask "  Agent name [Jarvis]: " "Jarvis")
-echo -e "  ${GREEN}✓${NC} Name: ${BOLD}${AGENT_NAME}${NC}"
+echo -e "  ${GREEN}ok${NC} Name: ${BOLD}${AGENT_NAME}${NC}"
 echo ""
 
-# ── 3b: Provider ──
+# --- 3b: Provider ---
 echo -e "  ${BOLD}Choose your AI provider:${NC}"
 echo ""
-echo -e "    ${GREEN}1)${NC} 🟢 ${BOLD}OpenAI${NC}         ${DIM}— GPT-4o, GPT-4.1, o3, o4-mini${NC}"
-echo -e "    ${GREEN}2)${NC} 🟠 ${BOLD}Anthropic${NC}      ${DIM}— Claude Sonnet 4, Claude Haiku${NC}"
-echo -e "    ${GREEN}3)${NC} 🔵 ${BOLD}Google${NC}         ${DIM}— Gemini 2.5 Pro, Gemini 2.0 Flash${NC}"
-echo -e "    ${GREEN}4)${NC} 🟣 ${BOLD}Ollama (Local)${NC} ${DIM}— FREE, Llama 3, Mistral, DeepSeek${NC}"
+echo -e "    ${GREEN}1)${NC} ${BOLD}OpenAI${NC}           ${DIM}GPT-4o, GPT-4.1, o3, o4-mini${NC}"
+echo -e "    ${GREEN}2)${NC} ${BOLD}Anthropic${NC}        ${DIM}Claude Sonnet 4, Claude Haiku${NC}"
+echo -e "    ${GREEN}3)${NC} ${BOLD}Google${NC}           ${DIM}Gemini 2.5 Pro, Gemini 2.0 Flash${NC}"
+echo -e "    ${GREEN}4)${NC} ${BOLD}Ollama (Local)${NC}   ${DIM}FREE - Llama 3, Mistral, DeepSeek${NC}"
 echo ""
 PROVIDER_CHOICE=$(ask "  Your choice [1]: " "1")
 echo ""
 
 OLLAMA=false
-LLM_PROVIDER=""
-LLM_MODEL=""
 
 case $PROVIDER_CHOICE in
     1) LLM_PROVIDER="openai" ;;
@@ -187,7 +206,7 @@ case $PROVIDER_CHOICE in
     *) LLM_PROVIDER="openai" ;;
 esac
 
-# ── 3c: API Key (if not Ollama) ──
+# --- 3c: API Key ---
 if [ "$OLLAMA" = false ]; then
     case $LLM_PROVIDER in
         openai)
@@ -207,10 +226,10 @@ if [ "$OLLAMA" = false ]; then
     API_KEY=$(ask_key "  API key: ")
 
     if [ -z "$API_KEY" ]; then
-        echo -e "  ${YELLOW}⚠ No key entered. Add it later in the Dashboard → Settings.${NC}"
+        echo -e "  ${YELLOW}! No key entered. Add it later in Dashboard > Settings.${NC}"
     else
         MASKED=$(mask_key "$API_KEY")
-        echo -e "  ${GREEN}✓${NC} Key saved: ${DIM}${MASKED}${NC}"
+        echo -e "  ${GREEN}ok${NC} Key saved: ${DIM}${MASKED}${NC}"
 
         case $LLM_PROVIDER in
             openai)    sed -i "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=${API_KEY}|" .env ;;
@@ -220,24 +239,24 @@ if [ "$OLLAMA" = false ]; then
     fi
     echo ""
 else
-    echo -e "  ${GREEN}✓${NC} Ollama is ${BOLD}free${NC} — no API key needed!"
+    echo -e "  ${GREEN}ok${NC} Ollama is ${BOLD}free${NC} - no API key needed!"
     echo ""
 fi
 
-# ── 3d: Model Selection ──
+# --- 3d: Model Selection ---
 echo -e "  ${BOLD}Choose your model:${NC}"
 echo ""
 
 case $LLM_PROVIDER in
     openai)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}GPT-4o${NC}              ${DIM}— Best overall, great for agents${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}GPT-4o Mini${NC}         ${DIM}— Fast & cheap, good quality${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}GPT-4.1${NC}             ${DIM}— Latest, best coding & instruction following${NC}"
-        echo -e "    ${GREEN}4)${NC} ${BOLD}GPT-4.1 Mini${NC}        ${DIM}— Latest budget model, very capable${NC}"
-        echo -e "    ${GREEN}5)${NC} ${BOLD}GPT-4.1 Nano${NC}        ${DIM}— Fastest, lowest cost${NC}"
-        echo -e "    ${GREEN}6)${NC} ${BOLD}o3${NC}                  ${DIM}— Reasoning model, best for complex tasks${NC}"
-        echo -e "    ${GREEN}7)${NC} ${BOLD}o3-mini${NC}             ${DIM}— Reasoning, faster & cheaper${NC}"
-        echo -e "    ${GREEN}8)${NC} ${BOLD}o4-mini${NC}             ${DIM}— Latest reasoning, multimodal${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}GPT-4o${NC}              ${DIM}Best overall, great for agents${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}GPT-4o Mini${NC}         ${DIM}Fast and cheap, good quality${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}GPT-4.1${NC}             ${DIM}Latest, best coding and instructions${NC}"
+        echo -e "    ${GREEN}4)${NC} ${BOLD}GPT-4.1 Mini${NC}        ${DIM}Latest budget model, very capable${NC}"
+        echo -e "    ${GREEN}5)${NC} ${BOLD}GPT-4.1 Nano${NC}        ${DIM}Fastest, lowest cost${NC}"
+        echo -e "    ${GREEN}6)${NC} ${BOLD}o3${NC}                  ${DIM}Reasoning model, best for complex tasks${NC}"
+        echo -e "    ${GREEN}7)${NC} ${BOLD}o3-mini${NC}             ${DIM}Reasoning, faster and cheaper${NC}"
+        echo -e "    ${GREEN}8)${NC} ${BOLD}o4-mini${NC}             ${DIM}Latest reasoning, multimodal${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
@@ -253,9 +272,9 @@ case $LLM_PROVIDER in
         esac
         ;;
     anthropic)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}Claude Sonnet 4${NC}     ${DIM}— Best quality, great for agents${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}Claude 3.5 Haiku${NC}    ${DIM}— Fast & cheap, still very good${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}Claude 3.5 Sonnet${NC}   ${DIM}— Previous gen, proven reliability${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}Claude Sonnet 4${NC}     ${DIM}Best quality, great for agents${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}Claude 3.5 Haiku${NC}    ${DIM}Fast and cheap, still very good${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}Claude 3.5 Sonnet${NC}   ${DIM}Previous gen, proven reliability${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
@@ -266,9 +285,9 @@ case $LLM_PROVIDER in
         esac
         ;;
     google)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}Gemini 2.5 Pro${NC}      ${DIM}— Most capable, complex reasoning${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}Gemini 2.5 Flash${NC}    ${DIM}— Fast & efficient, great value${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}Gemini 2.0 Flash${NC}    ${DIM}— Previous gen, reliable & fast${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}Gemini 2.5 Pro${NC}      ${DIM}Most capable, complex reasoning${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}Gemini 2.5 Flash${NC}    ${DIM}Fast and efficient, great value${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}Gemini 2.0 Flash${NC}    ${DIM}Previous gen, reliable and fast${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
@@ -279,11 +298,11 @@ case $LLM_PROVIDER in
         esac
         ;;
     ollama)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}Llama 3.1 8B${NC}       ${DIM}— Best open-source, 8GB RAM${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}Llama 3.1 70B${NC}      ${DIM}— Near GPT-4 quality, 48GB RAM${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}Mistral 7B${NC}          ${DIM}— Fast, good for general tasks, 8GB RAM${NC}"
-        echo -e "    ${GREEN}4)${NC} ${BOLD}DeepSeek Coder V2${NC}   ${DIM}— Best for code, 8GB RAM${NC}"
-        echo -e "    ${GREEN}5)${NC} ${BOLD}Phi-3 Mini${NC}          ${DIM}— Smallest, runs on 4GB RAM${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}Llama 3.1 8B${NC}       ${DIM}Best open-source, needs 8GB RAM${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}Llama 3.1 70B${NC}      ${DIM}Near GPT-4 quality, needs 48GB RAM${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}Mistral 7B${NC}          ${DIM}Fast, good for general tasks${NC}"
+        echo -e "    ${GREEN}4)${NC} ${BOLD}DeepSeek Coder V2${NC}   ${DIM}Best for code generation${NC}"
+        echo -e "    ${GREEN}5)${NC} ${BOLD}Phi-3 Mini${NC}          ${DIM}Smallest, runs on 4GB RAM${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
@@ -299,54 +318,53 @@ esac
 
 echo ""
 
-# ── Write config ──
+# --- Write config ---
 sed -i "s|^AGENT_NAME=.*|AGENT_NAME=${AGENT_NAME}|" .env 2>/dev/null || true
 sed -i "s|^LLM_PROVIDER=.*|LLM_PROVIDER=${LLM_PROVIDER}|" .env 2>/dev/null || true
 
-# Add model to .env if not present
 if grep -q "^LLM_MODEL=" .env 2>/dev/null; then
     sed -i "s|^LLM_MODEL=.*|LLM_MODEL=${LLM_MODEL}|" .env
 else
     echo "LLM_MODEL=${LLM_MODEL}" >> .env
 fi
 
-echo -e "  ${GREEN}✓${NC} Configuration saved"
+echo -e "  ${GREEN}ok${NC} Configuration saved"
 echo ""
-echo -e "  ┌─────────────────────────────────────────┐"
-echo -e "  │  Agent:    ${BOLD}${AGENT_NAME}${NC}                           "
-echo -e "  │  Provider: ${BOLD}${LLM_PROVIDER}${NC}                        "
-echo -e "  │  Model:    ${BOLD}${LLM_MODEL}${NC}                           "
-echo -e "  └─────────────────────────────────────────┘"
+echo "  +-------------------------------------------+"
+printf "  |  Agent:    %-30s|\n" "$AGENT_NAME"
+printf "  |  Provider: %-30s|\n" "$LLM_PROVIDER"
+printf "  |  Model:    %-30s|\n" "$LLM_MODEL"
+echo "  +-------------------------------------------+"
 echo ""
 
-# ═══════════════════════════════════════════════
+# =========================================
 # Step 4: Build & Start
-# ═══════════════════════════════════════════════
-echo -e "${CYAN}[4/5]${NC} ${BOLD}Building & starting ${AGENT_NAME}...${NC}"
+# =========================================
+echo -e "${CYAN}[4/5]${NC} ${BOLD}Building and starting ${AGENT_NAME}...${NC}"
 echo -e "  ${DIM}This takes 1-2 minutes on first run.${NC}"
 echo ""
 
 if [ "$OLLAMA" = true ]; then
-    docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d --build 2>&1 | grep -E "Created|Started|Building|Pulling|done" | while IFS= read -r line; do
-        echo -e "  ${DIM}${line}${NC}"
-    done
+    docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d --build 2>&1 | \
+        grep -E "Created|Started|Building|Pulling|done" | \
+        while IFS= read -r line; do echo -e "  ${DIM}${line}${NC}"; done
 
     echo ""
-    echo -e "  ${DIM}Downloading ${LLM_MODEL} model (one-time download)...${NC}"
+    echo -e "  ${DIM}Downloading ${LLM_MODEL} model (one-time)...${NC}"
     docker exec jarvis-ollama ollama pull "$LLM_MODEL" 2>&1 | tail -5
 else
-    docker compose up -d --build 2>&1 | grep -E "Created|Started|Building|Pulling|done" | while IFS= read -r line; do
-        echo -e "  ${DIM}${line}${NC}"
-    done
+    docker compose up -d --build 2>&1 | \
+        grep -E "Created|Started|Building|Pulling|done" | \
+        while IFS= read -r line; do echo -e "  ${DIM}${line}${NC}"; done
 fi
 
 echo ""
-echo -e "  ${GREEN}✓${NC} Containers running"
+echo -e "  ${GREEN}ok${NC} Containers running"
 echo ""
 
-# ═══════════════════════════════════════════════
+# =========================================
 # Step 5: Wait for Health
-# ═══════════════════════════════════════════════
+# =========================================
 echo -e "${CYAN}[5/5]${NC} ${BOLD}Starting ${AGENT_NAME}...${NC}"
 
 HEALTHY=false
@@ -356,7 +374,7 @@ for i in $(seq 1 30); do
         HEALTHY=true
         break
     fi
-    printf "█"
+    printf "."
     sleep 1
 done
 echo ""
@@ -364,28 +382,28 @@ echo ""
 
 if [ "$HEALTHY" = true ]; then
     echo -e "${GREEN}"
-    echo "  ╔═════════════════════════════════════════╗"
-    echo "  ║   ✅  ${AGENT_NAME} is ready!                   ║"
-    echo "  ╚═════════════════════════════════════════╝"
+    echo "  ================================================"
+    echo "     ${AGENT_NAME} is ready!"
+    echo "  ================================================"
     echo -e "${NC}"
-    echo -e "  🌐 ${BOLD}Open Dashboard:${NC}  ${BLUE}http://localhost:8080${NC}"
+    echo -e "  Dashboard:  ${BOLD}${BLUE}http://localhost:8080${NC}"
     echo ""
     echo -e "  ${DIM}Running on a VPS? Access from your computer:${NC}"
     echo -e "  ${BOLD}ssh -L 8080:localhost:8080 user@your-server-ip${NC}"
-    echo -e "  ${DIM}Then open${NC} ${BLUE}http://localhost:8080${NC} ${DIM}in your browser${NC}"
+    echo -e "  ${DIM}Then open http://localhost:8080 in your browser${NC}"
     echo ""
-    echo -e "  ${DIM}────────────────────────────────────────${NC}"
-    echo -e "  ${DIM}Stop:${NC}     docker compose down"
-    echo -e "  ${DIM}Logs:${NC}     docker compose logs -f"
-    echo -e "  ${DIM}Restart:${NC}  docker compose restart"
-    echo -e "  ${DIM}Update:${NC}   git pull && docker compose up -d --build"
-    echo -e "  ${DIM}────────────────────────────────────────${NC}"
+    echo -e "  ${DIM}--------------------------------------------${NC}"
+    echo -e "  Stop:     ${DIM}docker compose down${NC}"
+    echo -e "  Logs:     ${DIM}docker compose logs -f${NC}"
+    echo -e "  Restart:  ${DIM}docker compose restart${NC}"
+    echo -e "  Update:   ${DIM}git pull && docker compose up -d --build${NC}"
+    echo -e "  ${DIM}--------------------------------------------${NC}"
     echo ""
 
-    # Auto-open browser (desktop only)
+    # Auto-open browser (desktop only, silent fail on VPS)
     command -v open &>/dev/null && open http://localhost:8080 2>/dev/null || true
     command -v xdg-open &>/dev/null && xdg-open http://localhost:8080 2>/dev/null || true
 else
-    echo -e "  ${YELLOW}⏳ ${AGENT_NAME} is still starting up.${NC}"
+    echo -e "  ${YELLOW}${AGENT_NAME} is still starting up.${NC}"
     echo -e "  ${DIM}Check progress: docker compose logs -f${NC}"
 fi
