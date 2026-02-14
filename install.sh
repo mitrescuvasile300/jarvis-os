@@ -249,62 +249,81 @@ echo ""
 
 case $LLM_PROVIDER in
     openai)
-        echo -e "    ${DIM}--- Chat Models ---${NC}"
-        echo -e "    ${GREEN} 1)${NC} ${BOLD}GPT-4o${NC}              ${DIM}Best overall, great for agents${NC}"
-        echo -e "    ${GREEN} 2)${NC} ${BOLD}GPT-4o Mini${NC}         ${DIM}Fast and cheap, good quality${NC}"
-        echo -e "    ${GREEN} 3)${NC} ${BOLD}GPT-4.1${NC}             ${DIM}Latest, best coding and instructions${NC}"
-        echo -e "    ${GREEN} 4)${NC} ${BOLD}GPT-4.1 Mini${NC}        ${DIM}Latest budget model, very capable${NC}"
-        echo -e "    ${GREEN} 5)${NC} ${BOLD}GPT-4.1 Nano${NC}        ${DIM}Fastest, lowest cost${NC}"
+        echo -e "    ${DIM}--- GPT-5 Series (Latest) ---${NC}"
+        echo -e "    ${GREEN} 1)${NC} ${BOLD}GPT-5.2${NC}             ${DIM}Latest and most capable${NC}"
+        echo -e "    ${GREEN} 2)${NC} ${BOLD}GPT-5.2 Pro${NC}         ${DIM}Enhanced quality (higher cost)${NC}"
+        echo -e "    ${GREEN} 3)${NC} ${BOLD}GPT-5.1${NC}             ${DIM}Previous gen, excellent quality${NC}"
+        echo -e "    ${GREEN} 4)${NC} ${BOLD}GPT-5${NC}               ${DIM}Base GPT-5, great all-rounder${NC}"
+        echo -e "    ${GREEN} 5)${NC} ${BOLD}GPT-5 Mini${NC}          ${DIM}Fast and affordable${NC}"
+        echo -e "    ${GREEN} 6)${NC} ${BOLD}GPT-5 Nano${NC}          ${DIM}Fastest, lowest cost${NC}"
+        echo -e "    ${DIM}--- Codex (Code-Optimized) ---${NC}"
+        echo -e "    ${GREEN} 7)${NC} ${BOLD}GPT-5.2 Codex${NC}       ${DIM}Best for code generation${NC}"
+        echo -e "    ${GREEN} 8)${NC} ${BOLD}GPT-5.1 Codex Max${NC}   ${DIM}Max context code model${NC}"
         echo -e "    ${DIM}--- Reasoning Models ---${NC}"
-        echo -e "    ${GREEN} 6)${NC} ${BOLD}o4-mini${NC}             ${DIM}Latest reasoning, multimodal${NC}"
-        echo -e "    ${GREEN} 7)${NC} ${BOLD}o3${NC}                  ${DIM}Advanced reasoning, complex tasks${NC}"
-        echo -e "    ${GREEN} 8)${NC} ${BOLD}o3-mini${NC}             ${DIM}Reasoning, faster and cheaper${NC}"
-        echo -e "    ${GREEN} 9)${NC} ${BOLD}o3-pro${NC}              ${DIM}Most powerful reasoning (higher cost)${NC}"
-        echo -e "    ${GREEN}10)${NC} ${BOLD}o1${NC}                  ${DIM}Original reasoning model${NC}"
-        echo -e "    ${GREEN}11)${NC} ${BOLD}o1-pro${NC}              ${DIM}Enhanced reasoning (higher cost)${NC}"
+        echo -e "    ${GREEN} 9)${NC} ${BOLD}o4-mini${NC}             ${DIM}Latest reasoning, multimodal${NC}"
+        echo -e "    ${GREEN}10)${NC} ${BOLD}o3-pro${NC}              ${DIM}Most powerful reasoning${NC}"
+        echo -e "    ${GREEN}11)${NC} ${BOLD}o3${NC}                  ${DIM}Advanced reasoning${NC}"
+        echo -e "    ${GREEN}12)${NC} ${BOLD}o3-mini${NC}             ${DIM}Reasoning, faster and cheaper${NC}"
+        echo -e "    ${DIM}--- Previous Gen ---${NC}"
+        echo -e "    ${GREEN}13)${NC} ${BOLD}GPT-4.1${NC}             ${DIM}Previous gen, still great${NC}"
+        echo -e "    ${GREEN}14)${NC} ${BOLD}GPT-4o${NC}              ${DIM}Proven reliability${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
-            1) LLM_MODEL="gpt-4o" ;;
-            2) LLM_MODEL="gpt-4o-mini" ;;
-            3) LLM_MODEL="gpt-4.1" ;;
-            4) LLM_MODEL="gpt-4.1-mini" ;;
-            5) LLM_MODEL="gpt-4.1-nano" ;;
-            6) LLM_MODEL="o4-mini" ;;
-            7) LLM_MODEL="o3" ;;
-            8) LLM_MODEL="o3-mini" ;;
-            9) LLM_MODEL="o3-pro" ;;
-            10) LLM_MODEL="o1" ;;
-            11) LLM_MODEL="o1-pro" ;;
-            *) LLM_MODEL="gpt-4o" ;;
+            1) LLM_MODEL="gpt-5.2" ;;
+            2) LLM_MODEL="gpt-5.2-pro" ;;
+            3) LLM_MODEL="gpt-5.1" ;;
+            4) LLM_MODEL="gpt-5" ;;
+            5) LLM_MODEL="gpt-5-mini" ;;
+            6) LLM_MODEL="gpt-5-nano" ;;
+            7) LLM_MODEL="gpt-5.2-codex" ;;
+            8) LLM_MODEL="gpt-5.1-codex-max" ;;
+            9) LLM_MODEL="o4-mini" ;;
+            10) LLM_MODEL="o3-pro" ;;
+            11) LLM_MODEL="o3" ;;
+            12) LLM_MODEL="o3-mini" ;;
+            13) LLM_MODEL="gpt-4.1" ;;
+            14) LLM_MODEL="gpt-4o" ;;
+            *) LLM_MODEL="gpt-5.2" ;;
         esac
         ;;
     anthropic)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}Claude Sonnet 4${NC}     ${DIM}Best balance of quality and speed${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}Claude Opus 4${NC}       ${DIM}Most powerful, complex tasks (higher cost)${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}Claude 3.5 Haiku${NC}    ${DIM}Fastest and cheapest${NC}"
-        echo -e "    ${GREEN}4)${NC} ${BOLD}Claude 3.5 Sonnet${NC}   ${DIM}Previous gen, proven reliability${NC}"
+        echo -e "    ${DIM}--- Opus (Most Powerful) ---${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}Claude Opus 4.6${NC}     ${DIM}Latest, most capable (highest cost)${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}Claude Opus 4.5${NC}     ${DIM}Previous, excellent quality${NC}"
+        echo -e "    ${DIM}--- Sonnet (Best Balance) ---${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}Claude Sonnet 4.5${NC}   ${DIM}Latest balanced model${NC}"
+        echo -e "    ${GREEN}4)${NC} ${BOLD}Claude Sonnet 4${NC}     ${DIM}Previous gen, proven${NC}"
+        echo -e "    ${DIM}--- Haiku (Fast & Cheap) ---${NC}"
+        echo -e "    ${GREEN}5)${NC} ${BOLD}Claude Haiku 4.5${NC}    ${DIM}Fastest, great value${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
-            1) LLM_MODEL="claude-sonnet-4-20250514" ;;
-            2) LLM_MODEL="claude-opus-4-20250514" ;;
-            3) LLM_MODEL="claude-3-5-haiku-20241022" ;;
-            4) LLM_MODEL="claude-3-5-sonnet-20241022" ;;
-            *) LLM_MODEL="claude-sonnet-4-20250514" ;;
+            1) LLM_MODEL="claude-opus-4-6" ;;
+            2) LLM_MODEL="claude-opus-4-5-20251101" ;;
+            3) LLM_MODEL="claude-sonnet-4-5-20250929" ;;
+            4) LLM_MODEL="claude-sonnet-4-20250514" ;;
+            5) LLM_MODEL="claude-haiku-4-5-20251001" ;;
+            *) LLM_MODEL="claude-opus-4-6" ;;
         esac
         ;;
     google)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}Gemini 2.5 Pro${NC}      ${DIM}Most capable, complex reasoning${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}Gemini 2.5 Flash${NC}    ${DIM}Fast and efficient, great value${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}Gemini 2.0 Flash${NC}    ${DIM}Previous gen, reliable and fast${NC}"
+        echo -e "    ${DIM}--- Gemini 3 (Latest) ---${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}Gemini 3 Pro${NC}        ${DIM}Latest, most capable${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}Gemini 3 Flash${NC}      ${DIM}Latest, fast and efficient${NC}"
+        echo -e "    ${DIM}--- Gemini 2.5 ---${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}Gemini 2.5 Pro${NC}      ${DIM}Complex reasoning, proven${NC}"
+        echo -e "    ${GREEN}4)${NC} ${BOLD}Gemini 2.5 Flash${NC}    ${DIM}Great value, reliable${NC}"
+        echo -e "    ${GREEN}5)${NC} ${BOLD}Gemini 2.0 Flash${NC}    ${DIM}Previous gen, budget friendly${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
-            1) LLM_MODEL="gemini-2.5-pro" ;;
-            2) LLM_MODEL="gemini-2.5-flash" ;;
-            3) LLM_MODEL="gemini-2.0-flash" ;;
-            *) LLM_MODEL="gemini-2.5-pro" ;;
+            1) LLM_MODEL="gemini-3-pro" ;;
+            2) LLM_MODEL="gemini-3-flash" ;;
+            3) LLM_MODEL="gemini-2.5-pro" ;;
+            4) LLM_MODEL="gemini-2.5-flash" ;;
+            5) LLM_MODEL="gemini-2.0-flash" ;;
+            *) LLM_MODEL="gemini-3-pro" ;;
         esac
         ;;
     ollama)
