@@ -249,14 +249,19 @@ echo ""
 
 case $LLM_PROVIDER in
     openai)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}GPT-4o${NC}              ${DIM}Best overall, great for agents${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}GPT-4o Mini${NC}         ${DIM}Fast and cheap, good quality${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}GPT-4.1${NC}             ${DIM}Latest, best coding and instructions${NC}"
-        echo -e "    ${GREEN}4)${NC} ${BOLD}GPT-4.1 Mini${NC}        ${DIM}Latest budget model, very capable${NC}"
-        echo -e "    ${GREEN}5)${NC} ${BOLD}GPT-4.1 Nano${NC}        ${DIM}Fastest, lowest cost${NC}"
-        echo -e "    ${GREEN}6)${NC} ${BOLD}o3${NC}                  ${DIM}Reasoning model, best for complex tasks${NC}"
-        echo -e "    ${GREEN}7)${NC} ${BOLD}o3-mini${NC}             ${DIM}Reasoning, faster and cheaper${NC}"
-        echo -e "    ${GREEN}8)${NC} ${BOLD}o4-mini${NC}             ${DIM}Latest reasoning, multimodal${NC}"
+        echo -e "    ${DIM}--- Chat Models ---${NC}"
+        echo -e "    ${GREEN} 1)${NC} ${BOLD}GPT-4o${NC}              ${DIM}Best overall, great for agents${NC}"
+        echo -e "    ${GREEN} 2)${NC} ${BOLD}GPT-4o Mini${NC}         ${DIM}Fast and cheap, good quality${NC}"
+        echo -e "    ${GREEN} 3)${NC} ${BOLD}GPT-4.1${NC}             ${DIM}Latest, best coding and instructions${NC}"
+        echo -e "    ${GREEN} 4)${NC} ${BOLD}GPT-4.1 Mini${NC}        ${DIM}Latest budget model, very capable${NC}"
+        echo -e "    ${GREEN} 5)${NC} ${BOLD}GPT-4.1 Nano${NC}        ${DIM}Fastest, lowest cost${NC}"
+        echo -e "    ${DIM}--- Reasoning Models ---${NC}"
+        echo -e "    ${GREEN} 6)${NC} ${BOLD}o4-mini${NC}             ${DIM}Latest reasoning, multimodal${NC}"
+        echo -e "    ${GREEN} 7)${NC} ${BOLD}o3${NC}                  ${DIM}Advanced reasoning, complex tasks${NC}"
+        echo -e "    ${GREEN} 8)${NC} ${BOLD}o3-mini${NC}             ${DIM}Reasoning, faster and cheaper${NC}"
+        echo -e "    ${GREEN} 9)${NC} ${BOLD}o3-pro${NC}              ${DIM}Most powerful reasoning (higher cost)${NC}"
+        echo -e "    ${GREEN}10)${NC} ${BOLD}o1${NC}                  ${DIM}Original reasoning model${NC}"
+        echo -e "    ${GREEN}11)${NC} ${BOLD}o1-pro${NC}              ${DIM}Enhanced reasoning (higher cost)${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
@@ -265,22 +270,27 @@ case $LLM_PROVIDER in
             3) LLM_MODEL="gpt-4.1" ;;
             4) LLM_MODEL="gpt-4.1-mini" ;;
             5) LLM_MODEL="gpt-4.1-nano" ;;
-            6) LLM_MODEL="o3" ;;
-            7) LLM_MODEL="o3-mini" ;;
-            8) LLM_MODEL="o4-mini" ;;
+            6) LLM_MODEL="o4-mini" ;;
+            7) LLM_MODEL="o3" ;;
+            8) LLM_MODEL="o3-mini" ;;
+            9) LLM_MODEL="o3-pro" ;;
+            10) LLM_MODEL="o1" ;;
+            11) LLM_MODEL="o1-pro" ;;
             *) LLM_MODEL="gpt-4o" ;;
         esac
         ;;
     anthropic)
-        echo -e "    ${GREEN}1)${NC} ${BOLD}Claude Sonnet 4${NC}     ${DIM}Best quality, great for agents${NC}"
-        echo -e "    ${GREEN}2)${NC} ${BOLD}Claude 3.5 Haiku${NC}    ${DIM}Fast and cheap, still very good${NC}"
-        echo -e "    ${GREEN}3)${NC} ${BOLD}Claude 3.5 Sonnet${NC}   ${DIM}Previous gen, proven reliability${NC}"
+        echo -e "    ${GREEN}1)${NC} ${BOLD}Claude Sonnet 4${NC}     ${DIM}Best balance of quality and speed${NC}"
+        echo -e "    ${GREEN}2)${NC} ${BOLD}Claude Opus 4${NC}       ${DIM}Most powerful, complex tasks (higher cost)${NC}"
+        echo -e "    ${GREEN}3)${NC} ${BOLD}Claude 3.5 Haiku${NC}    ${DIM}Fastest and cheapest${NC}"
+        echo -e "    ${GREEN}4)${NC} ${BOLD}Claude 3.5 Sonnet${NC}   ${DIM}Previous gen, proven reliability${NC}"
         echo ""
         MODEL_CHOICE=$(ask "  Your choice [1]: " "1")
         case $MODEL_CHOICE in
             1) LLM_MODEL="claude-sonnet-4-20250514" ;;
-            2) LLM_MODEL="claude-3-5-haiku-20241022" ;;
-            3) LLM_MODEL="claude-3-5-sonnet-20241022" ;;
+            2) LLM_MODEL="claude-opus-4-20250514" ;;
+            3) LLM_MODEL="claude-3-5-haiku-20241022" ;;
+            4) LLM_MODEL="claude-3-5-sonnet-20241022" ;;
             *) LLM_MODEL="claude-sonnet-4-20250514" ;;
         esac
         ;;
@@ -369,13 +379,13 @@ echo -e "${CYAN}[5/5]${NC} ${BOLD}Starting ${AGENT_NAME}...${NC}"
 
 HEALTHY=false
 printf "  "
-for i in $(seq 1 30); do
+for i in $(seq 1 90); do
     if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
         HEALTHY=true
         break
     fi
     printf "."
-    sleep 1
+    sleep 2
 done
 echo ""
 echo ""

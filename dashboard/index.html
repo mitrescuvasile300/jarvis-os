@@ -268,16 +268,24 @@
             <div class="form-group">
               <label class="form-label">Default Model</label>
               <select class="form-select" id="setting-default-model">
-                <optgroup label="OpenAI">
+                <optgroup label="OpenAI — Chat">
                   <option value="gpt-4o">GPT-4o</option>
                   <option value="gpt-4o-mini">GPT-4o Mini</option>
                   <option value="gpt-4.1">GPT-4.1</option>
                   <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                  <option value="o3-mini">o3-mini</option>
+                  <option value="gpt-4.1-nano">GPT-4.1 Nano</option>
+                </optgroup>
+                <optgroup label="OpenAI — Reasoning">
                   <option value="o4-mini">o4-mini</option>
+                  <option value="o3">o3</option>
+                  <option value="o3-mini">o3-mini</option>
+                  <option value="o3-pro">o3-pro</option>
+                  <option value="o1">o1</option>
+                  <option value="o1-pro">o1-pro</option>
                 </optgroup>
                 <optgroup label="Anthropic">
                   <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                  <option value="claude-opus-4-20250514">Claude Opus 4</option>
                   <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
                 </optgroup>
                 <optgroup label="Google">
@@ -559,19 +567,25 @@
     <div class="form-group">
       <label class="form-label">LLM Model</label>
       <select class="form-select" id="new-agent-model">
-        <optgroup label="OpenAI">
+        <optgroup label="OpenAI — Chat">
           <option value="gpt-4o" selected>GPT-4o — Best overall</option>
           <option value="gpt-4o-mini">GPT-4o Mini — Fast & cheap</option>
           <option value="gpt-4.1">GPT-4.1 — Latest, best coding</option>
           <option value="gpt-4.1-mini">GPT-4.1 Mini — Latest budget</option>
           <option value="gpt-4.1-nano">GPT-4.1 Nano — Fastest</option>
-          <option value="o3">o3 — Reasoning, complex tasks</option>
-          <option value="o3-mini">o3-mini — Reasoning, cheaper</option>
+        </optgroup>
+        <optgroup label="OpenAI — Reasoning">
           <option value="o4-mini">o4-mini — Latest reasoning</option>
+          <option value="o3">o3 — Advanced reasoning</option>
+          <option value="o3-mini">o3-mini — Reasoning, cheaper</option>
+          <option value="o3-pro">o3-pro — Most powerful</option>
+          <option value="o1">o1 — Original reasoning</option>
+          <option value="o1-pro">o1-pro — Enhanced reasoning</option>
         </optgroup>
         <optgroup label="Anthropic">
-          <option value="claude-sonnet-4-20250514">Claude Sonnet 4 — Best quality</option>
-          <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku — Fast & cheap</option>
+          <option value="claude-sonnet-4-20250514">Claude Sonnet 4 — Best balance</option>
+          <option value="claude-opus-4-20250514">Claude Opus 4 — Most powerful</option>
+          <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku — Fastest</option>
           <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet — Proven</option>
         </optgroup>
         <optgroup label="Google">
