@@ -16,8 +16,8 @@ COPY dashboard/ ./dashboard/
 COPY plugins/ ./plugins/
 COPY pyproject.toml .
 
-# Install jarvis package
-RUN pip install --no-cache-dir -e .
+# Install jarvis package (non-editable in container)
+RUN pip install --no-cache-dir .
 
 # Create data directories
 RUN mkdir -p /app/data /app/memory /app/logs
