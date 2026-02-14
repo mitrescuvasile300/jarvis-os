@@ -1,0 +1,38 @@
+# ═══════════════════════════════════════════════════════════════
+# Jarvis OS — Integration Configuration
+# Credentials should go in .env, not here.
+# This file controls behavior and settings.
+# ═══════════════════════════════════════════════════════════════
+
+slack:
+  # Bot will respond to DMs and @mentions
+  respond_to_dms: true
+  respond_to_mentions: true
+  # Channels to auto-join (bot must be invited first)
+  channels: []
+
+twitter:
+  # Auto-post scheduled content
+  auto_post: false
+  # Reply to mentions
+  reply_to_mentions: false
+  # Max posts per day (safety limit)
+  max_posts_per_day: 10
+
+github:
+  # Auto-create PRs for code changes
+  auto_pr: true
+  # Default branch to base PRs on
+  default_branch: "main"
+
+email:
+  # Send daily digest
+  daily_digest: false
+  digest_time: "08:00"
+  digest_recipients: []
+
+webhooks:
+  # Incoming webhook endpoint
+  enabled: true
+  # Shared secret for webhook verification
+  # Set WEBHOOK_SECRET in .env

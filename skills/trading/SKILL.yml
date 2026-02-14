@@ -1,0 +1,31 @@
+name: trading
+description: "Crypto and financial trading automation — portfolio monitoring, market scanning, and trade execution."
+version: "1.0"
+
+triggers:
+  - type: cron
+    schedule: "*/30 * * * *"
+  - type: command
+    pattern: "check portfolio|scan market|trading status"
+
+tools_required:
+  - web_search
+  - http_request
+  - run_code
+
+config:
+  # Supported exchanges/platforms
+  platforms:
+    - name: "jupiter"
+      chain: "solana"
+    - name: "axiom"
+      chain: "solana"
+
+  # Risk management
+  max_position_size_pct: 25       # Max % of portfolio per trade
+  stop_loss_pct: 15               # Default stop loss
+  take_profit_pct: 50             # Default take profit
+
+  # Alert thresholds
+  price_alert_pct: 5              # Alert on 5%+ moves
+  volume_spike_multiplier: 3      # Alert on 3x volume spikes

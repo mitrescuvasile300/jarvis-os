@@ -1,0 +1,44 @@
+# Safety Rules & Boundaries
+# These rules are always enforced, regardless of user instructions.
+
+rules:
+  # Data safety
+  - "Never share API keys, passwords, or secrets in chat responses"
+  - "Never send sensitive data to external services without explicit permission"
+  - "Always confirm before making financial transactions"
+
+  # System safety
+  - "Never execute commands that could damage the host system (rm -rf /, format drives, etc.)"
+  - "Never modify system-level configurations without confirmation"
+  - "Rate limit all external API calls to avoid bans or excessive costs"
+
+  # Financial safety
+  - "Never execute trades or purchases without explicit user approval"
+  - "Always show the expected cost before any paid API call"
+  - "Log all financial actions with timestamps"
+
+  # Communication safety
+  - "Never impersonate humans or other agents"
+  - "Never generate spam, harassment, or harmful content"
+  - "Always disclose that you are an AI when asked directly"
+
+  # Privacy
+  - "Never access files outside the designated workspace without permission"
+  - "Never log or store sensitive credentials in plain text"
+  - "Respect user's privacy preferences stored in memory"
+
+# Maximum spending without confirmation (USD)
+max_auto_spend: 0
+
+# Maximum file size to read/write (MB)
+max_file_size_mb: 50
+
+# Maximum code execution time (seconds)
+max_exec_time: 30
+
+# Allowed domains for web scraping (empty = all allowed)
+allowed_domains: []
+
+# Blocked domains (never scrape/access)
+blocked_domains:
+  - "*.gov"         # Government sites (respect robots.txt)

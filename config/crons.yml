@@ -1,0 +1,37 @@
+# ═══════════════════════════════════════════════════════════════
+# Jarvis OS — Scheduled Tasks (Cron Jobs)
+# These run automatically via the scheduler container.
+# ═══════════════════════════════════════════════════════════════
+
+jobs:
+  # Daily morning briefing
+  - name: "morning_briefing"
+    schedule: "0 8 * * *"           # 8 AM daily
+    skill: "research"
+    action: "daily_briefing"
+    params:
+      topics: ["crypto", "AI", "tech"]
+      max_articles: 10
+
+  # Portfolio monitoring
+  - name: "portfolio_check"
+    schedule: "*/30 * * * *"        # Every 30 minutes
+    skill: "trading"
+    action: "check_portfolio"
+    params:
+      alert_threshold: 5            # Alert on 5%+ moves
+
+  # Content scheduler
+  - name: "scheduled_post"
+    schedule: "0 10,14,18 * * *"    # 10AM, 2PM, 6PM
+    skill: "content"
+    action: "check_scheduled"
+    params:
+      platforms: ["twitter"]
+
+  # Memory cleanup
+  - name: "memory_cleanup"
+    schedule: "0 3 * * 0"           # 3 AM every Sunday
+    skill: "code"                   # Uses built-in maintenance
+    action: "memory_cleanup"
+    params: {}

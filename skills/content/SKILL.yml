@@ -1,0 +1,27 @@
+name: content
+description: "Content creation and social media management — draft posts, schedule tweets, manage editorial calendar."
+version: "1.0"
+
+triggers:
+  - type: cron
+    schedule: "0 10,14,18 * * *"
+  - type: command
+    pattern: "draft tweet|write post|content calendar"
+
+tools_required:
+  - web_search
+  - read_file
+  - write_file
+  - http_request
+
+config:
+  platforms:
+    - twitter
+  tone: "professional but approachable"
+  topics:
+    - "AI"
+    - "crypto"
+    - "building in public"
+  max_daily_posts: 5
+  character_limits:
+    twitter: 280

@@ -1,0 +1,33 @@
+# Use this for fully local setup (no API keys needed)
+# docker compose -f docker-compose.yml -f docker-compose.ollama.yml up -d
+
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: jarvis-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  jarvis-agent:
+    environment:
+      - LLM_PROVIDER=ollama
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3
+    depends_on:
+      - ollama
+
+volumes:
+  ollama-models:
+    name: jarvis-os-ollama-models

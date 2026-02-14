@@ -1,0 +1,23 @@
+name: research
+description: "Web research, news monitoring, and daily briefings — keeps you informed on topics you care about."
+version: "1.0"
+
+triggers:
+  - type: cron
+    schedule: "0 8 * * *"
+  - type: command
+    pattern: "research|briefing|what's new"
+
+tools_required:
+  - web_search
+  - http_request
+  - read_file
+  - write_file
+
+config:
+  default_topics:
+    - "AI agents"
+    - "cryptocurrency"
+    - "technology startups"
+  max_articles: 10
+  summary_length: "brief"        # brief | detailed

@@ -1,0 +1,19 @@
+name: code
+description: "Code generation, review, debugging, and system maintenance — your AI pair programmer."
+version: "1.0"
+
+triggers:
+  - type: command
+    pattern: "write code|review code|debug|fix bug"
+
+tools_required:
+  - run_code
+  - read_file
+  - write_file
+  - shell_command
+  - search_files
+
+config:
+  preferred_language: "python"
+  auto_test: true
+  style_guide: "PEP 8"

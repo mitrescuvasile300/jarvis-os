@@ -1,0 +1,7 @@
+# Local LLM with Ollama — use with docker-compose.ollama.yml
+FROM ollama/ollama:latest
+
+# Pre-pull a default model on build (optional, saves startup time)
+# RUN ollama pull llama3
+
+EXPOSE 11434
