@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jarvis OS — Mission Control</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="app-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <h1>Jarvis OS</h1>
+        <span>Mission Control v1.0</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">Overview</div>
+        <div class="nav-item active" data-page="dashboard">
+          <span class="nav-icon">📊</span> Dashboard
+        </div>
+        <div class="nav-item" data-page="agents">
+          <span class="nav-icon">🤖</span> Agents
+          <span class="badge" id="agent-count-badge">0</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Workspace</div>
+        <div class="nav-item" data-page="chat">
+          <span class="nav-icon">💬</span> Chat
+        </div>
+        <div class="nav-item" data-page="logs">
+          <span class="nav-icon">📋</span> Logs
+        </div>
+        <div class="nav-item" data-page="memory">
+          <span class="nav-icon">🧠</span> Memory
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">System</div>
+        <div class="nav-item" data-page="settings">
+          <span class="nav-icon">⚙️</span> Settings
+        </div>
+      </div>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="main-content">
+
+    <!-- ════════ DASHBOARD PAGE ════════ -->
+    <div id="page-dashboard" class="page">
+      <div class="main-header">
+        <h2>Dashboard</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openNewAgentModal()">
+            ➕ New Agent
+          </button>
+        </div>
+      </div>
+      <div class="page-content fade-in">
+        <!-- Stats -->
+        <div class="grid grid-4" style="margin-bottom: 24px">
+          <div class="stat-card">
+            <div class="stat-label">Active Agents</div>
+            <div class="stat-value" id="stat-active">0</div>
+            <div class="stat-change positive" id="stat-active-note">No agents yet</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Memory Entries</div>
+            <div class="stat-value" id="stat-memory">0</div>
+            <div class="stat-change">Conversations + knowledge</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tools Available</div>
+            <div class="stat-value" id="stat-tools">8</div>
+            <div class="stat-change">Built-in tools</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">LLM Provider</div>
+            <div class="stat-value" id="stat-provider" style="font-size:1.2rem">Not configured</div>
+            <div class="stat-change" id="stat-model-note">Set up in Settings</div>
+          </div>
+        </div>
+
+        <!-- Recent agents -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Your Agents</h3>
+            <button class="btn btn-secondary btn-sm" onclick="openNewAgentModal()">Create New</button>
+          </div>
+          <div id="dashboard-agents-list">
+            <div class="empty-state">
+              <div class="empty-icon">🤖</div>
+              <h3>No agents yet</h3>
+              <p>Create your first AI agent to get started.</p>
+              <button class="btn btn-primary" onclick="openNewAgentModal()">➕ Create Agent</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ AGENTS PAGE ════════ -->
+    <div id="page-agents" class="page hidden">
+      <div class="main-header">
+        <h2>Agents</h2>
+        <div class="header-actions">
+          <button class="btn btn-primary" onclick="openNewAgentModal()">➕ New Agent</button>
+        </div>
+      </div>
+      <div class="page-content fade-in">
+        <div class="grid grid-3" id="agents-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ CHAT PAGE ════════ -->
+    <div id="page-chat" class="page hidden">
+      <div class="main-header">
+        <h2>💬 Chat — <span id="chat-agent-name">Select an agent</span></h2>
+        <div class="header-actions">
+          <select class="form-select" id="chat-agent-select" onchange="switchChatAgent(this.value)" style="width:200px">
+            <option value="">Select agent...</option>
+          </select>
+        </div>
+      </div>
+      <div class="page-content" style="padding:16px 32px 32px">
+        <div class="chat-container">
+          <div class="chat-messages" id="chat-messages">
+            <div class="empty-state">
+              <div class="empty-icon">💬</div>
+              <h3>Start a conversation</h3>
+              <p>Select an agent above to begin chatting.</p>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <textarea id="chat-input" placeholder="Type a message..." rows="1" onkeydown="handleChatKey(event)" disabled></textarea>
+            <button class="chat-send-btn" id="chat-send" onclick="sendMessage()" disabled>→</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ LOGS PAGE ════════ -->
+    <div id="page-logs" class="page hidden">
+      <div class="main-header">
+        <h2>📋 Activity Logs</h2>
+        <div class="header-actions">
+          <button class="btn btn-secondary btn-sm" onclick="clearLogs()">Clear</button>
+        </div>
+      </div>
+      <div class="page-content fade-in">
+        <div class="log-viewer" id="log-viewer">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ MEMORY PAGE ════════ -->
+    <div id="page-memory" class="page hidden">
+      <div class="main-header">
+        <h2>🧠 Agent Memory</h2>
+      </div>
+      <div class="page-content fade-in">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Search Memory</h3>
+          </div>
+          <div class="form-input-group" style="margin-bottom: 20px">
+            <input type="text" class="form-input" id="memory-search" placeholder="Search knowledge, conversations...">
+            <button class="btn btn-primary" onclick="searchMemory()">Search</button>
+          </div>
+          <div id="memory-results">
+            <p style="color: var(--text-muted)">Search to find stored knowledge and conversations.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ SETTINGS PAGE ════════ -->
+    <div id="page-settings" class="page hidden">
+      <div class="main-header">
+        <h2>⚙️ Settings</h2>
+      </div>
+      <div class="page-content fade-in">
+        <div class="tabs">
+          <div class="tab active" data-tab="api-keys">API Keys</div>
+          <div class="tab" data-tab="general">General</div>
+          <div class="tab" data-tab="integrations">Integrations</div>
+        </div>
+
+        <!-- API Keys Tab -->
+        <div id="tab-api-keys" class="tab-content">
+          <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 0.9rem">
+            Configure your LLM provider API keys. Each agent can use a different provider.
+          </p>
+
+          <!-- OpenAI -->
+          <div class="api-key-card">
+            <div class="provider-icon" style="background: rgba(0,166,126,0.15)">🟢</div>
+            <div class="provider-info">
+              <div class="provider-name">OpenAI</div>
+              <div class="provider-status" id="openai-status" style="color: var(--text-muted)">Not configured</div>
+            </div>
+            <input type="password" class="form-input key-input" id="key-openai" placeholder="sk-..." style="max-width:260px">
+            <button class="btn btn-secondary btn-sm" onclick="saveApiKey('openai')">Save</button>
+          </div>
+
+          <!-- Anthropic -->
+          <div class="api-key-card">
+            <div class="provider-icon" style="background: rgba(204,120,50,0.15)">🟠</div>
+            <div class="provider-info">
+              <div class="provider-name">Anthropic</div>
+              <div class="provider-status" id="anthropic-status" style="color: var(--text-muted)">Not configured</div>
+            </div>
+            <input type="password" class="form-input key-input" id="key-anthropic" placeholder="sk-ant-..." style="max-width:260px">
+            <button class="btn btn-secondary btn-sm" onclick="saveApiKey('anthropic')">Save</button>
+          </div>
+
+          <!-- Ollama -->
+          <div class="api-key-card">
+            <div class="provider-icon" style="background: rgba(99,102,241,0.15)">🟣</div>
+            <div class="provider-info">
+              <div class="provider-name">Ollama (Local)</div>
+              <div class="provider-status" id="ollama-status" style="color: var(--text-muted)">Free — runs on your GPU</div>
+            </div>
+            <input type="text" class="form-input key-input" id="key-ollama" placeholder="http://localhost:11434" style="max-width:260px" value="http://localhost:11434">
+            <button class="btn btn-secondary btn-sm" onclick="saveApiKey('ollama')">Test</button>
+          </div>
+
+          <!-- Google -->
+          <div class="api-key-card">
+            <div class="provider-icon" style="background: rgba(66,133,244,0.15)">🔵</div>
+            <div class="provider-info">
+              <div class="provider-name">Google Gemini</div>
+              <div class="provider-status" id="google-status" style="color: var(--text-muted)">Not configured</div>
+            </div>
+            <input type="password" class="form-input key-input" id="key-google" placeholder="AI..." style="max-width:260px">
+            <button class="btn btn-secondary btn-sm" onclick="saveApiKey('google')">Save</button>
+          </div>
+        </div>
+
+        <!-- General Tab -->
+        <div id="tab-general" class="tab-content hidden">
+          <div class="card" style="max-width:600px">
+            <div class="form-group">
+              <label class="form-label">Default Agent Name</label>
+              <input type="text" class="form-input" id="setting-agent-name" value="Jarvis">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Default Model</label>
+              <select class="form-select" id="setting-default-model">
+                <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                <option value="gpt-4o-mini">GPT-4o Mini (OpenAI — cheaper)</option>
+                <option value="claude-sonnet-4-20250514">Claude Sonnet (Anthropic)</option>
+                <option value="claude-3-5-haiku-20241022">Claude Haiku (Anthropic — cheaper)</option>
+                <option value="llama3">Llama 3 (Ollama — free)</option>
+                <option value="mistral">Mistral (Ollama — free)</option>
+                <option value="gemini-pro">Gemini Pro (Google)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Server Port</label>
+              <input type="number" class="form-input" id="setting-port" value="8080" style="max-width:120px">
+            </div>
+            <div class="form-group">
+              <label class="toggle">
+                <input type="checkbox" id="setting-auto-memory" checked>
+                <span class="toggle-track"></span>
+                Auto-save conversations to memory
+              </label>
+            </div>
+            <button class="btn btn-primary" onclick="saveGeneralSettings()">Save Settings</button>
+          </div>
+        </div>
+
+        <!-- Integrations Tab -->
+        <div id="tab-integrations" class="tab-content hidden">
+          <div class="grid grid-2">
+            <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div class="provider-icon" style="background:rgba(74,21,75,0.2)">💬</div>
+                <div>
+                  <div class="provider-name">Slack</div>
+                  <div class="provider-status" style="color:var(--text-muted)">Bot token for messaging</div>
+                </div>
+              </div>
+              <input type="password" class="form-input" id="key-slack" placeholder="xoxb-..." style="width:100%">
+              <button class="btn btn-secondary btn-sm" onclick="saveApiKey('slack')">Save</button>
+            </div>
+
+            <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div class="provider-icon" style="background:rgba(29,161,242,0.15)">🐦</div>
+                <div>
+                  <div class="provider-name">Twitter / X</div>
+                  <div class="provider-status" style="color:var(--text-muted)">For social media agents</div>
+                </div>
+              </div>
+              <input type="password" class="form-input" id="key-twitter" placeholder="API key..." style="width:100%">
+              <button class="btn btn-secondary btn-sm" onclick="saveApiKey('twitter')">Save</button>
+            </div>
+
+            <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div class="provider-icon" style="background:rgba(255,255,255,0.08)">🐙</div>
+                <div>
+                  <div class="provider-name">GitHub</div>
+                  <div class="provider-status" style="color:var(--text-muted)">Personal access token</div>
+                </div>
+              </div>
+              <input type="password" class="form-input" id="key-github" placeholder="ghp_..." style="width:100%">
+              <button class="btn btn-secondary btn-sm" onclick="saveApiKey('github')">Save</button>
+            </div>
+
+            <div class="api-key-card" style="flex-direction:column; align-items:flex-start; gap:12px">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div class="provider-icon" style="background:rgba(99,102,241,0.15)">📧</div>
+                <div>
+                  <div class="provider-name">Email (SMTP)</div>
+                  <div class="provider-status" style="color:var(--text-muted)">For email notifications</div>
+                </div>
+              </div>
+              <input type="text" class="form-input" id="key-email" placeholder="smtp://user:pass@host:587" style="width:100%">
+              <button class="btn btn-secondary btn-sm" onclick="saveApiKey('email')">Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ════════ NEW AGENT MODAL ════════ -->
+<div class="modal-overlay" id="new-agent-modal">
+  <div class="modal">
+    <h3 class="modal-title">Create New Agent</h3>
+    <p class="modal-subtitle">Choose a template and configure your agent.</p>
+
+    <div class="form-group">
+      <label class="form-label">Agent Name</label>
+      <input type="text" class="form-input" id="new-agent-name" placeholder="my-trading-bot">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Template</label>
+      <div class="template-grid" id="template-picker">
+        <div class="template-option selected" data-template="trading">
+          <div class="template-icon">💹</div>
+          <div class="template-name">Trading</div>
+          <div class="template-desc">Crypto trading & analysis</div>
+        </div>
+        <div class="template-option" data-template="research">
+          <div class="template-icon">🔬</div>
+          <div class="template-name">Research</div>
+          <div class="template-desc">Web research & briefings</div>
+        </div>
+        <div class="template-option" data-template="content">
+          <div class="template-icon">✍️</div>
+          <div class="template-name">Content</div>
+          <div class="template-desc">Social media & writing</div>
+        </div>
+        <div class="template-option" data-template="social-media">
+          <div class="template-icon">📱</div>
+          <div class="template-name">Social Media</div>
+          <div class="template-desc">Twitter/X growth</div>
+        </div>
+        <div class="template-option" data-template="support">
+          <div class="template-icon">🎧</div>
+          <div class="template-name">Support</div>
+          <div class="template-desc">Customer support bot</div>
+        </div>
+        <div class="template-option" data-template="devops">
+          <div class="template-icon">🛠️</div>
+          <div class="template-name">DevOps</div>
+          <div class="template-desc">Infrastructure & monitoring</div>
+        </div>
+        <div class="template-option" data-template="personal-assistant">
+          <div class="template-icon">🧑‍💼</div>
+          <div class="template-name">Assistant</div>
+          <div class="template-desc">Personal AI assistant</div>
+        </div>
+        <div class="template-option" data-template="custom">
+          <div class="template-icon">⚡</div>
+          <div class="template-name">Custom</div>
+          <div class="template-desc">Build from scratch</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">LLM Model</label>
+      <select class="form-select" id="new-agent-model">
+        <optgroup label="OpenAI">
+          <option value="gpt-4o" selected>GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o Mini (faster, cheaper)</option>
+          <option value="gpt-4-turbo">GPT-4 Turbo</option>
+        </optgroup>
+        <optgroup label="Anthropic">
+          <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+          <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku</option>
+        </optgroup>
+        <optgroup label="Ollama (Local — Free)">
+          <option value="llama3">Llama 3</option>
+          <option value="mistral">Mistral</option>
+          <option value="codellama">Code Llama</option>
+          <option value="phi3">Phi-3</option>
+        </optgroup>
+        <optgroup label="Google">
+          <option value="gemini-pro">Gemini Pro</option>
+          <option value="gemini-flash">Gemini Flash</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Personality</label>
+      <textarea class="form-textarea" id="new-agent-personality" rows="2" placeholder="Describe how the agent should behave..."></textarea>
+      <div class="form-hint">Leave blank to use template default.</div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeNewAgentModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createAgent()">🚀 Create Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>

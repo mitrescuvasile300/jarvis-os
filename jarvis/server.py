@@ -1,7 +1,9 @@
-"""Jarvis OS — HTTP API Server.
+"""Jarvis OS — HTTP Server with REST API and Dashboard.
 
-Exposes a REST API for interacting with the Jarvis agent.
-Supports chat, memory queries, skill execution, and health checks.
+Serves:
+- Dashboard UI at /
+- REST API at /api/*
+- Health check at /health
 """
 
 import asyncio
@@ -9,8 +11,8 @@ import json
 import logging
 import os
 import signal
-import sys
 from datetime import datetime
+from pathlib import Path
 
 from aiohttp import web
 
@@ -24,64 +26,129 @@ class JarvisServer:
     def __init__(self):
         self.config = load_config()
         self.agent = JarvisAgent(self.config)
-        self.app = web.Application()
-        self._setup_routes()
+        self.started_at = datetime.now()
 
-    def _setup_routes(self):
-        self.app.router.add_get("/health", self.health)
-        self.app.router.add_post("/api/chat", self.chat)
-        self.app.router.add_get("/api/memory/search", self.memory_search)
-        self.app.router.add_get("/api/skills", self.list_skills)
-        self.app.router.add_post("/api/skills/{skill}/run", self.run_skill)
-        self.app.router.add_get("/api/status", self.status)
+    async def initialize(self):
+        """Initialize the agent and all components."""
+        await self.agent.initialize()
+        logger.info(f"Agent '{self.agent.name}' initialized")
 
-    def _check_auth(self, request: web.Request) -> bool:
-        """Validate API key if configured."""
-        api_key = self.config.get("agent", {}).get("api_key", "")
-        if not api_key:
-            return True
-        auth_header = request.headers.get("Authorization", "")
-        return auth_header == f"Bearer {api_key}"
+    def create_app(self) -> web.Application:
+        """Create the aiohttp application."""
+        app = web.Application()
 
-    async def health(self, request: web.Request) -> web.Response:
+        # Dashboard routes
+        app.router.add_get("/", self.handle_dashboard)
+        app.router.add_static("/static", self._dashboard_static_path(), name="static")
+
+        # API routes
+        app.router.add_get("/health", self.handle_health)
+        app.router.add_post("/api/chat", self.handle_chat)
+        app.router.add_get("/api/status", self.handle_status)
+        app.router.add_get("/api/memory/search", self.handle_memory_search)
+        app.router.add_get("/api/skills", self.handle_skills)
+        app.router.add_post("/api/skills/{name}/run", self.handle_skill_run)
+        app.router.add_get("/api/tools", self.handle_tools)
+        app.router.add_post("/api/agents", self.handle_create_agent)
+        app.router.add_get("/api/agents", self.handle_list_agents)
+        app.router.add_post("/api/settings/keys", self.handle_save_key)
+
+        return app
+
+    def _dashboard_static_path(self) -> str:
+        """Find the dashboard static files."""
+        # Check multiple locations
+        candidates = [
+            Path(__file__).parent.parent / "dashboard" / "static",
+            Path("dashboard") / "static",
+            Path("/app/dashboard/static"),
+        ]
+        for path in candidates:
+            if path.exists():
+                return str(path)
+        # Create a minimal fallback
+        fallback = Path("dashboard/static")
+        fallback.mkdir(parents=True, exist_ok=True)
+        return str(fallback)
+
+    # ── Dashboard ────────────────────────────────────────────
+
+    async def handle_dashboard(self, request: web.Request) -> web.Response:
+        """Serve the dashboard HTML."""
+        candidates = [
+            Path(__file__).parent.parent / "dashboard" / "index.html",
+            Path("dashboard") / "index.html",
+            Path("/app/dashboard/index.html"),
+        ]
+        for path in candidates:
+            if path.exists():
+                return web.FileResponse(path)
+
+        return web.Response(
+            text="<h1>Jarvis OS</h1><p>Dashboard not found. API is running at /api/*</p>",
+            content_type="text/html",
+        )
+
+    # ── API Handlers ─────────────────────────────────────────
+
+    async def handle_health(self, request: web.Request) -> web.Response:
+        """Health check endpoint."""
+        uptime = int((datetime.now() - self.started_at).total_seconds())
+        memory_count = await self.agent.memory.count()
+
         return web.json_response({
             "status": "healthy",
-            "agent": self.config["agent"]["name"],
+            "agent": self.agent.name,
             "version": "1.0.0",
-            "uptime_seconds": int((datetime.now() - self.agent.started_at).total_seconds()),
-            "memory_entries": await self.agent.memory.count(),
+            "uptime_seconds": uptime,
+            "memory_entries": memory_count,
             "skills_loaded": len(self.agent.skills),
+            "tools_available": len(self.agent.tools.list()),
         })
 
-    async def chat(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "Unauthorized"}, status=401)
-
+    async def handle_chat(self, request: web.Request) -> web.Response:
+        """Chat with the agent."""
         try:
-            body = await request.json()
-        except json.JSONDecodeError:
+            data = await request.json()
+        except Exception:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
-        message = body.get("message", "").strip()
+        message = data.get("message", "").strip()
         if not message:
             return web.json_response({"error": "Message is required"}, status=400)
 
-        conversation_id = body.get("conversation_id", "default")
+        conversation_id = data.get("conversation_id", "api")
 
-        response = await self.agent.chat(message, conversation_id=conversation_id)
+        try:
+            response = await self.agent.chat(message, conversation_id=conversation_id)
+            return web.json_response({
+                "text": response.get("text", ""),
+                "tools_used": response.get("tools_used", []),
+                "conversation_id": conversation_id,
+            })
+        except Exception as e:
+            logger.error(f"Chat error: {e}")
+            return web.json_response({"error": str(e)}, status=500)
+
+    async def handle_status(self, request: web.Request) -> web.Response:
+        """Detailed agent status."""
+        uptime = int((datetime.now() - self.started_at).total_seconds())
+        memory_count = await self.agent.memory.count()
 
         return web.json_response({
-            "response": response["text"],
-            "conversation_id": conversation_id,
-            "tools_used": response.get("tools_used", []),
-            "memory_updated": response.get("memory_updated", False),
-            "timestamp": datetime.now().isoformat(),
+            "agent": {
+                "name": self.agent.name,
+                "model": self.config["agent"]["llm"]["model"],
+                "provider": self.config["agent"]["llm"]["provider"],
+            },
+            "uptime_seconds": uptime,
+            "memory": {"entries": memory_count},
+            "skills": list(self.agent.skills.keys()),
+            "tools": self.agent.tools.list(),
         })
 
-    async def memory_search(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "Unauthorized"}, status=401)
-
+    async def handle_memory_search(self, request: web.Request) -> web.Response:
+        """Search agent memory."""
         query = request.query.get("q", "")
         limit = int(request.query.get("limit", "10"))
 
@@ -89,12 +156,10 @@ class JarvisServer:
             return web.json_response({"error": "Query parameter 'q' is required"}, status=400)
 
         results = await self.agent.memory.search(query, limit=limit)
-        return web.json_response({"results": results, "query": query})
+        return web.json_response({"query": query, "results": results})
 
-    async def list_skills(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "Unauthorized"}, status=401)
-
+    async def handle_skills(self, request: web.Request) -> web.Response:
+        """List available skills."""
         skills = []
         for name, skill in self.agent.skills.items():
             skills.append({
@@ -105,77 +170,110 @@ class JarvisServer:
             })
         return web.json_response({"skills": skills})
 
-    async def run_skill(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "Unauthorized"}, status=401)
+    async def handle_skill_run(self, request: web.Request) -> web.Response:
+        """Execute a skill action."""
+        skill_name = request.match_info["name"]
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
 
-        skill_name = request.match_info["skill"]
-        body = await request.json() if request.content_length else {}
-        action = body.get("action", "default")
-        params = body.get("params", {})
+        action = data.get("action", "default")
+        params = data.get("params", {})
 
         try:
             result = await self.agent.run_skill(skill_name, action, params)
-            return web.json_response({"result": result, "skill": skill_name, "action": action})
-        except KeyError:
-            return web.json_response({"error": f"Skill '{skill_name}' not found"}, status=404)
+            return web.json_response({"result": str(result)})
         except Exception as e:
-            logger.exception(f"Skill execution failed: {e}")
             return web.json_response({"error": str(e)}, status=500)
 
-    async def status(self, request: web.Request) -> web.Response:
-        if not self._check_auth(request):
-            return web.json_response({"error": "Unauthorized"}, status=401)
-
+    async def handle_tools(self, request: web.Request) -> web.Response:
+        """List available tools."""
         return web.json_response({
-            "agent": self.config["agent"]["name"],
-            "version": "1.0.0",
-            "llm_provider": self.config["agent"]["llm"]["provider"],
-            "llm_model": self.config["agent"]["llm"]["model"],
-            "memory_backend": self.config["memory"]["backend"],
-            "vector_store": self.config["memory"]["vector_store"],
-            "skills": list(self.agent.skills.keys()),
-            "integrations": list(self.agent.integrations.keys()),
-            "uptime_seconds": int((datetime.now() - self.agent.started_at).total_seconds()),
+            "tools": self.agent.tools.get_definitions(),
         })
 
-    async def start(self):
-        """Initialize agent and start server."""
-        logger.info(f"Starting Jarvis OS v1.0.0 — agent: {self.config['agent']['name']}")
-        await self.agent.initialize()
+    async def handle_create_agent(self, request: web.Request) -> web.Response:
+        """Create a new agent workspace."""
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
 
-        runner = web.AppRunner(self.app)
-        await runner.setup()
+        name = data.get("name", "").strip()
+        template = data.get("template", "custom")
 
-        host = self.config.get("server", {}).get("host", "0.0.0.0")
-        port = self.config.get("server", {}).get("port", 8080)
+        if not name:
+            return web.json_response({"error": "Name is required"}, status=400)
 
-        site = web.TCPSite(runner, host, port)
-        await site.start()
+        try:
+            from jarvis.init_command import create_agent_workspace
+            path = create_agent_workspace(name, template)
+            return web.json_response({"success": True, "workspace": path})
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
 
-        logger.info(f"Jarvis OS running at http://{host}:{port}")
-        logger.info(f"LLM: {self.config['agent']['llm']['provider']} / {self.config['agent']['llm']['model']}")
-        logger.info(f"Skills loaded: {', '.join(self.agent.skills.keys()) or 'none'}")
-        logger.info(f"Integrations: {', '.join(self.agent.integrations.keys()) or 'none'}")
+    async def handle_list_agents(self, request: web.Request) -> web.Response:
+        """List agent workspaces."""
+        workspaces = []
+        for d in Path(".").iterdir():
+            config = d / "agent.config.json"
+            if d.is_dir() and config.exists():
+                try:
+                    c = json.loads(config.read_text())
+                    workspaces.append({
+                        "name": c.get("name", d.name),
+                        "template": c.get("template", "custom"),
+                        "model": c.get("model", "unknown"),
+                        "path": str(d),
+                    })
+                except Exception:
+                    pass
+        return web.json_response({"agents": workspaces})
 
-        # Keep running
-        stop_event = asyncio.Event()
+    async def handle_save_key(self, request: web.Request) -> web.Response:
+        """Save an API key to .env."""
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
 
-        def _handle_signal():
-            logger.info("Shutdown signal received")
-            stop_event.set()
+        provider = data.get("provider", "")
+        key = data.get("key", "")
 
-        loop = asyncio.get_event_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, _handle_signal)
+        env_map = {
+            "openai": "OPENAI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "google": "GOOGLE_API_KEY",
+            "ollama": "OLLAMA_URL",
+            "slack": "SLACK_BOT_TOKEN",
+            "twitter": "TWITTER_API_KEY",
+            "github": "GITHUB_TOKEN",
+        }
 
-        await stop_event.wait()
-        logger.info("Shutting down Jarvis OS...")
-        await self.agent.shutdown()
-        await runner.cleanup()
+        env_var = env_map.get(provider)
+        if not env_var:
+            return web.json_response({"error": f"Unknown provider: {provider}"}, status=400)
+
+        # Set in environment
+        os.environ[env_var] = key
+
+        # Persist to .env if it exists
+        env_file = Path(".env")
+        if env_file.exists():
+            content = env_file.read_text()
+            if f"{env_var}=" in content:
+                import re
+                content = re.sub(f"{env_var}=.*", f"{env_var}={key}", content)
+            else:
+                content += f"\n{env_var}={key}"
+            env_file.write_text(content)
+
+        return web.json_response({"success": True})
 
 
 def main():
+    """Start the Jarvis server."""
     logging.basicConfig(
         level=getattr(logging, os.getenv("AGENT_LOG_LEVEL", "INFO")),
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
@@ -183,7 +281,21 @@ def main():
     )
 
     server = JarvisServer()
-    asyncio.run(server.start())
+    app = server.create_app()
+
+    host = server.config["server"]["host"]
+    port = server.config["server"]["port"]
+
+    async def on_startup(app):
+        await server.initialize()
+
+    app.on_startup.append(on_startup)
+
+    logger.info(f"Starting Jarvis OS on {host}:{port}")
+    logger.info(f"Dashboard: http://localhost:{port}")
+    logger.info(f"API: http://localhost:{port}/api")
+
+    web.run_app(app, host=host, port=port, print=lambda x: logger.info(x))
 
 
 if __name__ == "__main__":
