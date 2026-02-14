@@ -260,5 +260,10 @@ async def main():
             await cmd_skill_list(args)
 
 
-if __name__ == "__main__":
+def main_sync():
+    """Synchronous entry point for the 'jarvis' CLI command."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    main_sync()

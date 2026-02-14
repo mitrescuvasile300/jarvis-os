@@ -19,6 +19,11 @@ COPY config/ ./config/
 COPY skills/ ./skills/
 COPY scripts/ ./scripts/
 COPY jarvis/ ./jarvis/
+COPY dashboard/ ./dashboard/
+COPY pyproject.toml .
+
+# Install jarvis CLI
+RUN pip install -e .
 
 # Create data directories
 RUN mkdir -p /app/data /app/memory /app/logs

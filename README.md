@@ -1,339 +1,218 @@
-<p align="center">
-  <img src="https://img.shields.io/badge/Jarvis_OS-v1.0-00ff88?style=for-the-badge&labelColor=0a0a0f" />
-  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
-  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" />
-  <img src="https://img.shields.io/badge/License-Proprietary-red?style=for-the-badge" />
-</p>
+# ⚡ Jarvis OS — Your Personal AI Operating System
 
-<h1 align="center">🤖 Jarvis OS — Your Personal AI Operating System</h1>
+Deploy autonomous AI agents that think, act, and learn — without constant supervision.
 
-<p align="center">
-  <strong>Deploy your own autonomous AI agent in minutes. One command. Full control.</strong>
-</p>
+**One command to install. Dashboard to manage. Chat with each agent.**
+
+![Dashboard](https://raw.githubusercontent.com/mitrescuvasile300/jarvis-os/main/docs/screenshots/dashboard.png)
 
 ---
 
-## What is Jarvis OS?
+## 🚀 Quick Install (30 seconds)
 
-Jarvis OS is a **self-hosted AI agent framework** that gives you a personal AI assistant capable of:
+**Requirements:** Docker installed on your computer. That's it.
 
-- 🧠 **Persistent Memory** — Remembers conversations, decisions, preferences across sessions
-- 🔧 **Tool Usage** — Browses the web, writes code, manages files, calls APIs
-- ⚡ **Autonomous Execution** — Runs scheduled tasks, monitors data, acts on triggers
-- 🔌 **Integrations** — Slack, Twitter/X, GitHub, email, and custom webhooks
-- 📦 **Extensible Skills** — Add new capabilities via simple YAML+Python skills
+```bash
+curl -fsSL https://raw.githubusercontent.com/mitrescuvasile300/jarvis-os/main/install.sh | bash
+```
 
-Think of it as your own private AI coworker that runs 24/7 on your infrastructure.
+This will:
+1. Download Jarvis OS
+2. Ask for your agent name and LLM preference
+3. Build and start everything in Docker
+4. Open the dashboard at `http://localhost:8080`
 
----
-
-## Quick Start
-
-### Prerequisites
-
-- Docker & Docker Compose installed
-- An OpenAI API key (or Anthropic, or local LLM via Ollama)
-- (Optional) Integration API keys for Slack, Twitter, etc.
-
-### 1. Clone & Configure
+### Manual Install
 
 ```bash
 git clone https://github.com/mitrescuvasile300/jarvis-os.git
 cd jarvis-os
-cp .env.example .env
+cp .env.example .env          # Edit with your API key
+docker compose up -d           # Start everything
+open http://localhost:8080     # Open dashboard
 ```
 
-Edit `.env` with your API keys:
+---
 
-```env
-# Required — at least one LLM provider
+## 🖥️ Dashboard — Mission Control
+
+Manage everything from the web interface. No terminal needed after setup.
+
+| Dashboard | Create Agent | Chat | Settings |
+|-----------|-------------|------|----------|
+| See all agents, stats, activity | Pick template + model | Talk to each agent | API keys, integrations |
+
+### What you can do:
+- **Create agents** from 8 templates (Trading, Research, Content, DevOps, etc.)
+- **Pick any model** — GPT-4o, Claude, Llama 3 (free/local), Gemini
+- **Chat with each agent** individually from the browser
+- **Monitor activity** — logs, memory, status
+- **Configure API keys** — OpenAI, Anthropic, Ollama, Google + Slack, Twitter, GitHub
+
+---
+
+## 🤖 Agent Templates
+
+Create agents instantly with pre-configured templates:
+
+| Template | Description | Tools | Use Case |
+|----------|-------------|-------|----------|
+| 💹 **Trading** | Crypto trading with 10-point checklist | 6 tools | Portfolio monitoring, token scanning, rug-pull detection |
+| 🔬 **Research** | Web research & daily briefings | 5 tools | Morning digests, deep research, topic tracking |
+| ✍️ **Content** | Content creation & scheduling | 4 tools | Draft posts, editorial calendar, scheduled publishing |
+| 📱 **Social Media** | Twitter/X growth & engagement | 4 tools | Follower growth, engagement, scheduling |
+| 🎧 **Support** | Customer support automation | 4 tools | Answer questions, triage issues, escalation |
+| 🛠️ **DevOps** | Infrastructure monitoring | 6 tools | Health checks, deployments, incident response |
+| 🧑‍💼 **Assistant** | Personal AI assistant | 5 tools | Tasks, calendar, research, reminders |
+| ⚡ **Custom** | Build from scratch | 3 tools | Anything you need |
+
+### CLI Usage (optional)
+
+```bash
+jarvis init my-bot --template trading
+jarvis start my-bot
+jarvis status
+jarvis chat --workspace my-bot
+jarvis list-templates
+```
+
+---
+
+## 🧠 Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│              JARVIS OS                       │
+├──────────┬──────────┬──────────┬────────────┤
+│  Agent   │  Memory  │  Tools   │  Comms     │
+│  Engine  │  System  │  Layer   │  Hub       │
+├──────────┼──────────┼──────────┼────────────┤
+│ Planner  │ Short    │ Browser  │ Slack      │
+│ Executor │ Working  │ Shell    │ Email      │
+│ Learner  │ Long     │ HTTP     │ Webhook    │
+│ Verifier │ Semantic │ Files    │ Cron       │
+├──────────┴──────────┴──────────┴────────────┤
+│              LLM Provider Layer              │
+│   OpenAI • Anthropic • Ollama • Gemini       │
+├─────────────────────────────────────────────┤
+│            Dashboard (Port 8080)             │
+│   Agent Spawner • Chat • Logs • Settings     │
+└─────────────────────────────────────────────┘
+```
+
+### Memory System (4 layers)
+- **Short-term** — Current conversation context
+- **Working** — Active task state (JSON key-value)
+- **Long-term** — Knowledge base (SQLite)
+- **Semantic** — Vector search for relevant memories (ChromaDB)
+
+### Built-in Tools
+| Tool | Description |
+|------|-------------|
+| `web_search` | Search the web (DuckDuckGo, no API key needed) |
+| `read_file` | Read any file |
+| `write_file` | Create or update files |
+| `run_code` | Execute Python in a sandbox |
+| `shell_command` | Run shell commands safely |
+| `http_request` | Call any API (GET/POST/PUT/DELETE) |
+| `list_files` | Browse directories |
+| `search_files` | Grep/search file contents |
+
+---
+
+## 💹 Trading Module
+
+The trading skill includes the exact system used by Viktor (the AI agent that built this):
+
+### 10-Point Entry Checklist
+Every token is scored before entry:
+
+| # | Check | Threshold |
+|---|-------|-----------|
+| 1 | Dev holding | ≤ 5% |
+| 2 | Top 10 holders | ≤ 20% |
+| 3 | Insider wallets | ≤ 20% |
+| 4 | Bundled transactions | ≤ 15% |
+| 5 | Token age | ≤ 40 minutes |
+| 6 | Profitable traders | ≥ 10 |
+| 7 | Social presence | ✓ Required |
+| 8 | Contract address visible | ✓ Required |
+| 9 | Community quality | ✓ Required |
+| 10 | Holder diversity | ✓ Required |
+
+**Score ≥ 8/10 = BUY signal** with position sizing (25% max, 15% stop-loss, 50% take-profit).
+
+### Rug-Pull Detection (8 signals)
+- 🔴 Dev dump risk (>10% holdings, no locked liquidity)
+- 🔴 Honeypot pattern (buys work, sells fail)
+- 🔴 Mint authority active (infinite supply risk)
+- 🟠 Concentrated supply (top 5 wallets >50%)
+- 🟠 Same funding source (coordinated wallets)
+- 🟠 Wash trading (>40% fake volume)
+- 🟡 No social proof (no Twitter/Telegram/website)
+- 🟡 Copycat token (copies popular token name)
+
+---
+
+## ⚙️ Configuration
+
+Everything is configurable via YAML files and environment variables:
+
+```bash
+# .env — API keys
 OPENAI_API_KEY=sk-...
-# or
-ANTHROPIC_API_KEY=sk-ant-...
-# or use local Ollama (no key needed)
-LLM_PROVIDER=ollama
+LLM_PROVIDER=openai          # or: anthropic, ollama
+AGENT_NAME=Jarvis
 
-# Optional integrations
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_APP_TOKEN=xapp-...
-TWITTER_API_KEY=...
-GITHUB_TOKEN=ghp_...
+# config/jarvis.yml — Agent settings
+# config/integrations.yml — Slack, Twitter, etc.
+# config/crons.yml — Scheduled tasks
+# agent/prompts/ — System prompt, personality, rules
 ```
 
-### 2. Launch
+---
+
+## 📊 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check |
+| `GET` | `/` | Dashboard UI |
+| `POST` | `/api/chat` | Chat with agent |
+| `GET` | `/api/status` | Agent status |
+| `GET` | `/api/memory/search?q=...` | Search memory |
+| `GET` | `/api/skills` | List skills |
+| `POST` | `/api/skills/{name}/run` | Execute skill |
+| `GET` | `/api/tools` | List tools |
+
+---
+
+## 🛠️ Development
 
 ```bash
-docker compose up -d
-```
+# Run tests
+pytest tests/ -v
 
-That's it. Jarvis is running.
+# Run a specific test
+pytest tests/test_trading.py -v
 
-### 3. Talk to Jarvis
-
-**Via CLI:**
-```bash
-docker exec -it jarvis-agent python -m jarvis.cli chat
-```
-
-**Via Slack** (if configured):
-Just DM your Jarvis bot.
-
-**Via API:**
-```bash
-curl -X POST http://localhost:8080/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Hello Jarvis, what can you do?"}'
+# Local development (without Docker)
+pip install -e ".[dev]"
+python -m jarvis.server
 ```
 
 ---
 
-## Architecture
+## ⚠️ Requirements
 
-```
-jarvis-os/
-├── agent/                    # Core agent engine
-│   ├── core.py              # Main agent loop (perceive → think → act)
-│   ├── prompts/             # System prompts & personality config
-│   │   ├── system.md        # Base system prompt
-│   │   ├── personality.yml  # Personality traits & style
-│   │   └── rules.yml        # Safety rules & boundaries
-│   ├── tools/               # Built-in tool implementations
-│   │   ├── web_browse.py    # Web browsing & scraping
-│   │   ├── code_exec.py     # Code execution (sandboxed)
-│   │   ├── file_ops.py      # File read/write/search
-│   │   ├── api_call.py      # Generic HTTP API calls
-│   │   └── shell.py         # Shell command execution
-│   └── memory/              # Memory subsystem
-│       ├── store.py         # Memory store (SQLite + vector)
-│       ├── short_term.py    # Conversation context
-│       ├── long_term.py     # Persistent knowledge
-│       └── semantic.py      # Semantic search & retrieval
-├── skills/                   # Extensible skill modules
-│   ├── trading/             # Crypto/trading automation
-│   ├── research/            # Web research & analysis
-│   ├── content/             # Content creation & social media
-│   └── code/                # Code generation & review
-├── config/
-│   ├── jarvis.yml           # Main configuration
-│   ├── integrations.yml     # Integration settings
-│   └── crons.yml            # Scheduled tasks
-├── scripts/                  # Utility scripts
-│   ├── setup.sh             # First-time setup wizard
-│   └── healthcheck.py       # Health monitoring
-├── docker/
-│   ├── Dockerfile           # Agent container
-│   └── Dockerfile.ollama    # Local LLM container
-├── docker-compose.yml        # Full stack orchestration
-├── .env.example             # Environment template
-├── requirements.txt         # Python dependencies
-└── tests/                   # Test suite
-    ├── test_agent.py        # Agent core tests
-    ├── test_memory.py       # Memory system tests
-    ├── test_tools.py        # Tool tests
-    └── test_skills.py       # Skill tests
-```
+- **Docker** — Required for the standard install
+- **LLM API Key** — OpenAI, Anthropic, or free with Ollama (local)
+- **API costs** — Typical: $0.01-0.10 per agent interaction (free with Ollama)
 
 ---
 
-## Configuration
+## 📝 License
 
-### `config/jarvis.yml` — Main Config
+Proprietary — licensed to purchasers. See [LICENSE](LICENSE).
 
-```yaml
-agent:
-  name: "Jarvis"
-  version: "1.0"
-  llm:
-    provider: "openai"          # openai | anthropic | ollama
-    model: "gpt-4o"             # or claude-sonnet-4-20250514, llama3, etc.
-    temperature: 0.7
-    max_tokens: 4096
-
-memory:
-  backend: "sqlite"             # sqlite | postgres
-  vector_store: "chromadb"      # chromadb | pinecone
-  retention_days: 365
-
-server:
-  host: "0.0.0.0"
-  port: 8080
-  api_key: ""                   # Set for production
-
-skills:
-  enabled:
-    - trading
-    - research
-    - content
-    - code
-```
-
-### `config/crons.yml` — Scheduled Tasks
-
-```yaml
-jobs:
-  - name: "morning_briefing"
-    schedule: "0 8 * * *"         # 8 AM daily
-    skill: "research"
-    action: "daily_briefing"
-    params:
-      topics: ["crypto", "AI", "tech"]
-
-  - name: "portfolio_check"
-    schedule: "*/30 * * * *"      # Every 30 min
-    skill: "trading"
-    action: "check_portfolio"
-
-  - name: "tweet_scheduler"
-    schedule: "0 10,14,18 * * *"  # 10AM, 2PM, 6PM
-    skill: "content"
-    action: "scheduled_post"
-```
-
----
-
-## Skills System
-
-Skills are self-contained modules that extend Jarvis's capabilities. Each skill has:
-
-```
-skills/{skill-name}/
-├── SKILL.yml          # Metadata, triggers, description
-├── actions.py         # Python implementation
-├── prompts/           # Skill-specific prompts
-└── tests/             # Skill tests
-```
-
-### Example: Creating a Custom Skill
-
-```yaml
-# skills/my-skill/SKILL.yml
-name: my-custom-skill
-description: "Monitors HackerNews for AI articles"
-version: "1.0"
-
-triggers:
-  - type: cron
-    schedule: "0 */2 * * *"
-  - type: command
-    pattern: "check hackernews"
-
-tools_required:
-  - web_browse
-  - file_ops
-```
-
-```python
-# skills/my-skill/actions.py
-from jarvis.skills import BaseSkill, action
-
-class MySkill(BaseSkill):
-    @action("check_hackernews")
-    async def check(self, params: dict) -> str:
-        html = await self.tools.web_browse("https://news.ycombinator.com")
-        articles = self.parse_hn(html)
-        ai_articles = [a for a in articles if "AI" in a["title"]]
-
-        if ai_articles:
-            summary = await self.llm.summarize(ai_articles)
-            await self.notify(f"📰 {len(ai_articles)} AI articles found:\n{summary}")
-
-        return f"Checked HN: {len(ai_articles)} relevant articles"
-```
-
----
-
-## Integrations
-
-### Slack
-
-1. Create a Slack App at [api.slack.com/apps](https://api.slack.com/apps)
-2. Add Bot Token Scopes: `chat:write`, `im:history`, `im:write`, `app_mentions:read`
-3. Enable Socket Mode and get an App-Level Token
-4. Add tokens to `.env`
-
-### Twitter/X
-
-1. Create a Developer App at [developer.x.com](https://developer.x.com)
-2. Get API Key, Secret, Access Token, Access Secret
-3. Add to `.env`
-
-### GitHub
-
-1. Create a Personal Access Token at [github.com/settings/tokens](https://github.com/settings/tokens)
-2. Scopes: `repo`, `workflow`
-3. Add to `.env`
-
-See `config/integrations.yml` for full configuration options.
-
----
-
-## Memory System
-
-Jarvis uses a 4-layer memory architecture:
-
-| Layer | Purpose | Retention | Backend |
-|-------|---------|-----------|---------|
-| **Short-term** | Current conversation context | Session | In-memory |
-| **Working** | Active task state & variables | Until task complete | SQLite |
-| **Long-term** | Facts, decisions, preferences | Configurable (default 1yr) | SQLite |
-| **Semantic** | Searchable knowledge base | Permanent | ChromaDB vectors |
-
-Memory is automatically managed — important information is promoted from short-term to long-term based on relevance scoring.
-
----
-
-## Testing
-
-```bash
-# Run all tests
-docker exec -it jarvis-agent pytest tests/ -v
-
-# Test specific component
-docker exec -it jarvis-agent pytest tests/test_memory.py -v
-
-# Test with coverage
-docker exec -it jarvis-agent pytest tests/ --cov=jarvis --cov-report=html
-```
-
----
-
-## Updating
-
-```bash
-git pull origin main
-docker compose down
-docker compose build --no-cache
-docker compose up -d
-```
-
-You keep all your data — memory, skills, and config persist in Docker volumes.
-
----
-
-## FAQ
-
-**Q: How much does it cost to run?**
-A: The only cost is your LLM API usage. With GPT-4o, typical usage is $5-15/month. With Ollama (local), it's free.
-
-**Q: Can I use a local LLM?**
-A: Yes! Set `LLM_PROVIDER=ollama` in `.env`. The included `docker-compose.ollama.yml` runs Llama 3 locally.
-
-**Q: Is my data private?**
-A: 100%. Everything runs on your machine. No data leaves your infrastructure except LLM API calls.
-
-**Q: Can I run multiple agents?**
-A: Yes — duplicate the config with different names and ports. Each agent has its own memory.
-
----
-
-## Support
-
-- 📧 Email: support@jarvis-os.dev
-- 💬 Discord: [discord.gg/jarvis-os](https://discord.gg/jarvis-os)
-- 🐛 Issues: Use this repo's Issues tab
-
----
-
-<p align="center">
-  <strong>Built with ❤️ for builders who want AI that actually works.</strong>
-</p>
+**Built by Viktor (@viktor_ai1302) — an AI agent running on Jarvis OS.**
