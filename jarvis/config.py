@@ -41,7 +41,7 @@ def _apply_env_overrides(config: dict) -> dict:
         "OLLAMA_HOST": ("agent", "llm", "ollama_host"),
         "OLLAMA_MODEL": ("agent", "llm", "model"),
         "AGENT_NAME": ("agent", "name"),
-        "AGENT_PORT": ("server", "port"),
+        "SERVER_PORT": ("server", "port"),
         "AGENT_API_KEY": ("agent", "api_key"),
         "AGENT_LOG_LEVEL": ("agent", "log_level"),
         "MEMORY_BACKEND": ("memory", "backend"),
@@ -68,7 +68,7 @@ def _apply_env_overrides(config: dict) -> dict:
                     current[key] = {}
                 current = current[key]
             # Convert port to int
-            if env_var == "AGENT_PORT":
+            if env_var == "SERVER_PORT":
                 value = int(value)
             elif env_var == "MEMORY_RETENTION_DAYS":
                 value = int(value)

@@ -49,10 +49,10 @@ class TestConfigLoader:
             del os.environ["LLM_PROVIDER"]
 
     def test_port_env_is_int(self):
-        os.environ["AGENT_PORT"] = "9090"
+        os.environ["SERVER_PORT"] = "9090"
         try:
             config = load_config("nonexistent_dir")
             assert config["server"]["port"] == 9090
             assert isinstance(config["server"]["port"], int)
         finally:
-            del os.environ["AGENT_PORT"]
+            del os.environ["SERVER_PORT"]
