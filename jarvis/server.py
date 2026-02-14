@@ -18,6 +18,8 @@ from aiohttp import web
 
 from jarvis.agent import JarvisAgent
 from jarvis.config import load_config
+from jarvis.websocket_handler import ChatWebSocket
+from jarvis.plugins import PluginLoader
 
 logger = logging.getLogger("jarvis.server")
 
@@ -26,11 +28,19 @@ class JarvisServer:
     def __init__(self):
         self.config = load_config()
         self.agent = JarvisAgent(self.config)
+        self.ws_handler = ChatWebSocket(self.agent)
+        self.plugin_loader = PluginLoader()
         self.started_at = datetime.now()
 
     async def initialize(self):
         """Initialize the agent and all components."""
         await self.agent.initialize()
+
+        # Load plugins
+        plugins = self.plugin_loader.load_all()
+        if plugins:
+            logger.info(f"Loaded {len(plugins)} plugin tool(s): {list(plugins.keys())}")
+
         logger.info(f"Agent '{self.agent.name}' initialized")
 
     def create_app(self) -> web.Application:
@@ -40,6 +50,9 @@ class JarvisServer:
         # Dashboard routes
         app.router.add_get("/", self.handle_dashboard)
         app.router.add_static("/static", self._dashboard_static_path(), name="static")
+
+        # WebSocket
+        app.router.add_get("/ws/chat", self.ws_handler.handle)
 
         # API routes
         app.router.add_get("/health", self.handle_health)
@@ -52,6 +65,8 @@ class JarvisServer:
         app.router.add_post("/api/agents", self.handle_create_agent)
         app.router.add_get("/api/agents", self.handle_list_agents)
         app.router.add_post("/api/settings/keys", self.handle_save_key)
+        app.router.add_get("/api/plugins", self.handle_list_plugins)
+        app.router.add_post("/api/plugins/{name}/run", self.handle_run_plugin)
 
         return app
 
@@ -230,6 +245,35 @@ class JarvisServer:
                 except Exception:
                     pass
         return web.json_response({"agents": workspaces})
+
+    async def handle_list_plugins(self, request: web.Request) -> web.Response:
+        """List loaded plugins."""
+        registry = self.plugin_loader.get_registry()
+        plugins = []
+        for name, info in registry.items():
+            plugins.append({
+                "name": name,
+                "description": info["description"],
+                "parameters": info["parameters"],
+                "source": os.path.basename(info.get("source", "")),
+            })
+        return web.json_response({"plugins": plugins})
+
+    async def handle_run_plugin(self, request: web.Request) -> web.Response:
+        """Execute a plugin tool."""
+        name = request.match_info["name"]
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+
+        try:
+            result = await self.plugin_loader.execute_tool(name, **data)
+            return web.json_response({"result": str(result)})
+        except ValueError as e:
+            return web.json_response({"error": str(e)}, status=404)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
 
     async def handle_save_key(self, request: web.Request) -> web.Response:
         """Save an API key to .env."""

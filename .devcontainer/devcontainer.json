@@ -1,0 +1,33 @@
+{
+  "name": "Jarvis OS",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "postCreateCommand": "pip install -e '.[dev]' && echo '✅ Jarvis OS ready!'",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "Jarvis Dashboard",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python"
+      },
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    },
+    "codespaces": {
+      "openFiles": ["README.md"]
+    }
+  },
+  "postStartCommand": "python -m jarvis.server &",
+  "remoteEnv": {
+    "AGENT_NAME": "Jarvis"
+  }
+}

@@ -51,6 +51,12 @@
         <div class="nav-item" data-page="settings">
           <span class="nav-icon">⚙️</span> Settings
         </div>
+        <div class="nav-item" data-page="plugins">
+          <span class="nav-icon">🔌</span> Plugins
+        </div>
+        <div class="nav-item" data-page="help">
+          <span class="nav-icon">❓</span> Help
+        </div>
       </div>
     </nav>
   </aside>
@@ -336,6 +342,142 @@
               <input type="text" class="form-input" id="key-email" placeholder="smtp://user:pass@host:587" style="width:100%">
               <button class="btn btn-secondary btn-sm" onclick="saveApiKey('email')">Save</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ PLUGINS PAGE ════════ -->
+    <div id="page-plugins" class="page hidden">
+      <div class="main-header">
+        <h2>🔌 Plugins</h2>
+      </div>
+      <div class="page-content fade-in">
+        <div class="card" style="margin-bottom: 20px">
+          <div class="card-header">
+            <h3 class="card-title">Custom Tools</h3>
+          </div>
+          <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem">
+            Add custom tools by dropping Python files into the <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">plugins/</code> folder.
+            Each plugin is automatically loaded when Jarvis starts.
+          </p>
+          <div id="plugins-list">
+            <div class="api-key-card">
+              <div class="provider-icon" style="background:rgba(34,197,94,0.15)">🌤️</div>
+              <div class="provider-info">
+                <div class="provider-name">get_weather</div>
+                <div class="provider-status" style="color:var(--text-muted)">Get current weather for a city</div>
+              </div>
+              <span class="status status-running"><span class="status-dot"></span> loaded</span>
+            </div>
+            <div class="api-key-card">
+              <div class="provider-icon" style="background:rgba(245,158,11,0.15)">💰</div>
+              <div class="provider-info">
+                <div class="provider-name">get_crypto_price</div>
+                <div class="provider-status" style="color:var(--text-muted)">Get cryptocurrency price in USD</div>
+              </div>
+              <span class="status status-running"><span class="status-dot"></span> loaded</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Create a Plugin</h3>
+          </div>
+          <div class="log-viewer" style="max-height:260px">
+<span style="color:var(--text-muted)"># plugins/my_tool.py</span>
+<span style="color:var(--cyan)">from</span> jarvis.plugins <span style="color:var(--cyan)">import</span> plugin_tool
+
+<span style="color:var(--green)">@plugin_tool(</span>
+    name=<span style="color:var(--orange)">"my_custom_tool"</span>,
+    description=<span style="color:var(--orange)">"What this tool does"</span>,
+    parameters={<span style="color:var(--orange)">"input"</span>: <span style="color:var(--orange)">"Description of input"</span>}
+<span style="color:var(--green)">)</span>
+<span style="color:var(--cyan)">async def</span> <span style="color:var(--accent)">my_custom_tool</span>(input: str) -> str:
+    <span style="color:var(--text-muted)"># Your code here</span>
+    <span style="color:var(--cyan)">return</span> f<span style="color:var(--orange)">"Result: {input}"</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ HELP PAGE ════════ -->
+    <div id="page-help" class="page hidden">
+      <div class="main-header">
+        <h2>❓ Help & FAQ</h2>
+      </div>
+      <div class="page-content fade-in" style="max-width:800px">
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">🚀 How do I get started?</h3>
+          <div class="faq-answer" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <ol style="padding-left:20px; display:flex; flex-direction:column; gap:8px">
+              <li><strong>Settings → API Keys</strong> — Enter your API key (OpenAI, Anthropic, or use Ollama for free)</li>
+              <li><strong>Dashboard → New Agent</strong> — Pick a template and model</li>
+              <li><strong>Chat</strong> — Start talking to your agent!</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">💰 Which model is cheapest?</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <p><strong>Free:</strong> Ollama with Llama 3 — runs locally on your computer, no API costs.</p>
+            <p style="margin-top:8px"><strong>Cheapest paid:</strong> GPT-4o Mini (~$0.001/message) or Claude Haiku (~$0.001/message).</p>
+            <p style="margin-top:8px"><strong>Best quality:</strong> GPT-4o or Claude Sonnet (~$0.01/message).</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">🌐 How do I access this from another computer?</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <p>If Jarvis runs on a VPS/server, you have 3 options:</p>
+            <ol style="padding-left:20px; margin-top:8px; display:flex; flex-direction:column; gap:6px">
+              <li><strong>SSH Tunnel</strong> (simplest): <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">ssh -L 8080:localhost:8080 user@your-server</code> then open localhost:8080</li>
+              <li><strong>Nginx + SSL</strong> (professional): Point a domain, get free HTTPS via Let's Encrypt</li>
+              <li><strong>Cloudflare Tunnel</strong> (no ports): Zero port forwarding needed, free SSL</li>
+            </ol>
+            <p style="margin-top:8px">See the full <strong>VPS Deploy Guide</strong> in docs/VPS_DEPLOY.md</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">🔌 How do I add custom tools?</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <p>Drop a Python file in the <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">plugins/</code> folder with the <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">@plugin_tool</code> decorator. See the Plugins page for examples.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">🤖 Can different agents use different models?</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <p>Yes! When creating an agent, pick any model from the dropdown. You can have a trading bot on GPT-4o and a research agent on Claude, running simultaneously.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">📊 Is my data safe?</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <p>Everything runs on your own machine or VPS. No data is sent to us. Your conversations, memory, and API keys stay local. With Ollama, even the AI runs locally — 100% offline capable.</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px; cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">🔄 How do I update?</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <p><code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">cd jarvis-os && git pull && docker compose up -d --build</code></p>
+            <p style="margin-top:8px">Your data and configuration are preserved between updates.</p>
+          </div>
+        </div>
+
+        <div class="card" style="cursor:pointer" onclick="this.querySelector('.faq-answer').classList.toggle('hidden')">
+          <h3 class="card-title">🆘 Something's not working</h3>
+          <div class="faq-answer hidden" style="margin-top:12px; color:var(--text-secondary); font-size:0.9rem">
+            <ol style="padding-left:20px; display:flex; flex-direction:column; gap:6px">
+              <li>Check the <strong>Logs</strong> page for error messages</li>
+              <li>Run <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">docker compose logs -f</code> for detailed output</li>
+              <li>Verify your API key is valid in Settings</li>
+              <li>Restart: <code style="background:var(--bg-input);padding:2px 6px;border-radius:3px">docker compose restart</code></li>
+            </ol>
           </div>
         </div>
       </div>

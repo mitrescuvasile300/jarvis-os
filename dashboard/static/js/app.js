@@ -3,6 +3,7 @@
    ═══════════════════════════════════════════════════════════ */
 
 const API_BASE = window.location.origin;
+const WS_BASE = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
 
 // ── State ──────────────────────────────────────────────────
 
@@ -353,6 +354,9 @@ function switchChatAgent(id) {
   document.getElementById('chat-send').disabled = false;
   document.getElementById('chat-agent-select').value = id;
 
+  // Try WebSocket connection for streaming
+  connectWebSocket(id);
+
   renderChatMessages(id);
 }
 
@@ -394,6 +398,98 @@ function formatMessage(text) {
     .replace(/\n/g, '<br>');
 }
 
+// ── WebSocket Connection ────────────────────────────────────
+
+let chatWs = null;
+let streamingMessage = '';
+
+function connectWebSocket(agentId) {
+  if (chatWs) { chatWs.close(); chatWs = null; }
+
+  try {
+    chatWs = new WebSocket(`${WS_BASE}/ws/chat?agent_id=${agentId}`);
+
+    chatWs.onopen = () => {
+      addLog('info', `WebSocket connected for agent ${agentId}`);
+    };
+
+    chatWs.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      handleWsMessage(data, agentId);
+    };
+
+    chatWs.onerror = () => {
+      chatWs = null; // Fallback to HTTP
+    };
+
+    chatWs.onclose = () => {
+      chatWs = null;
+    };
+  } catch (e) {
+    chatWs = null; // WebSocket not available, use HTTP fallback
+  }
+}
+
+function handleWsMessage(data, agentId) {
+  const container = document.getElementById('chat-messages');
+
+  if (data.type === 'token') {
+    // Streaming token
+    streamingMessage += data.text;
+    updateStreamingBubble(container, streamingMessage);
+  } else if (data.type === 'thinking') {
+    // Show thinking indicator
+    ensureStreamingBubble(container, '⏳ Thinking...');
+  } else if (data.type === 'tool_call') {
+    // Tool being used
+    updateStreamingBubble(container, streamingMessage + `\n🔧 Using ${data.tool}...`);
+  } else if (data.type === 'done') {
+    // Final response
+    const finalText = data.full_text || streamingMessage;
+    removeStreamingBubble(container);
+
+    state.chatHistories[agentId].push({
+      role: 'agent',
+      content: finalText,
+      tools_used: data.tools_used || [],
+      timestamp: Date.now(),
+    });
+    saveState();
+    renderChatMessages(agentId);
+    streamingMessage = '';
+
+    // Re-enable input
+    document.getElementById('chat-send').disabled = false;
+    document.getElementById('chat-input').disabled = false;
+    document.getElementById('chat-input').focus();
+  } else if (data.type === 'error') {
+    removeStreamingBubble(container);
+    showToast(`Error: ${data.message}`, 'error');
+    document.getElementById('chat-send').disabled = false;
+    document.getElementById('chat-input').disabled = false;
+  }
+}
+
+function ensureStreamingBubble(container, text) {
+  let bubble = container.querySelector('.streaming-bubble');
+  if (!bubble) {
+    bubble = document.createElement('div');
+    bubble.className = 'chat-message agent streaming-bubble';
+    container.appendChild(bubble);
+  }
+  bubble.innerHTML = formatMessage(text);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateStreamingBubble(container, text) {
+  ensureStreamingBubble(container, text);
+}
+
+function removeStreamingBubble(container) {
+  const bubble = container.querySelector('.streaming-bubble');
+  if (bubble) bubble.remove();
+}
+
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
@@ -413,13 +509,25 @@ async function sendMessage() {
   input.value = '';
   renderChatMessages(agent.id);
 
-  // Simulate typing (in production, this calls the actual API)
   const sendBtn = document.getElementById('chat-send');
   sendBtn.disabled = true;
   input.disabled = true;
 
+  // Try WebSocket first (streaming)
+  if (chatWs && chatWs.readyState === WebSocket.OPEN) {
+    streamingMessage = '';
+    chatWs.send(JSON.stringify({
+      type: 'message',
+      text: message,
+      agent_id: agent.id,
+      conversation_id: `chat_${agent.id}`,
+    }));
+    addLog('info', `[${agent.name}] Chat (WS): "${message.substring(0, 50)}..."`);
+    return; // Response handled by onmessage
+  }
+
+  // Fallback to HTTP
   try {
-    // Try real API call first
     let response;
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
