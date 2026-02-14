@@ -4,7 +4,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile
-    image: jarvis-os:latest
     container_name: jarvis-agent
     restart: unless-stopped
     ports:
@@ -25,23 +24,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
-
-  # Scheduler reuses the same image (no double build)
-  scheduler:
-    image: jarvis-os:latest
-    container_name: jarvis-scheduler
-    restart: unless-stopped
-    command: ["python", "-m", "jarvis.scheduler"]
-    volumes:
-      - jarvis-data:/app/data
-      - jarvis-memory:/app/memory
-      - ./config:/app/config:ro
-      - ./skills:/app/skills-custom:ro
-    env_file:
-      - .env
-    depends_on:
-      jarvis-agent:
-        condition: service_healthy
 
 volumes:
   jarvis-data:
