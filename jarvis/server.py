@@ -59,6 +59,9 @@ class JarvisServer:
         app.router.add_post("/api/chat", self.handle_chat)
         app.router.add_get("/api/status", self.handle_status)
         app.router.add_get("/api/memory/search", self.handle_memory_search)
+        app.router.add_get("/api/knowledge", self.handle_knowledge)
+        app.router.add_get("/api/knowledge/stats", self.handle_knowledge_stats)
+        app.router.add_post("/api/knowledge/consolidate", self.handle_knowledge_consolidate)
         app.router.add_get("/api/skills", self.handle_skills)
         app.router.add_post("/api/skills/{name}/run", self.handle_skill_run)
         app.router.add_get("/api/tools", self.handle_tools)
@@ -110,13 +113,15 @@ class JarvisServer:
         """Health check endpoint."""
         uptime = int((datetime.now() - self.started_at).total_seconds())
         memory_count = await self.agent.memory.count()
+        knowledge_files = len(self.agent.knowledge.get_all_knowledge()) if self.agent.knowledge else 0
 
         return web.json_response({
             "status": "healthy",
             "agent": self.agent.name,
-            "version": "1.0.0",
+            "version": "1.1.0",
             "uptime_seconds": uptime,
             "memory_entries": memory_count,
+            "knowledge_files": knowledge_files,
             "skills_loaded": len(self.agent.skills),
             "tools_available": len(self.agent.tools.list()),
         })
@@ -272,6 +277,36 @@ class JarvisServer:
             return web.json_response({"result": str(result)})
         except ValueError as e:
             return web.json_response({"error": str(e)}, status=404)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
+    # ── Knowledge Endpoints ────────────────────────────────────
+
+    async def handle_knowledge(self, request: web.Request) -> web.Response:
+        """List all knowledge files and their content."""
+        if not self.agent.knowledge:
+            return web.json_response({"error": "Knowledge system not initialized"}, status=500)
+
+        knowledge = self.agent.knowledge.get_all_knowledge()
+        files = []
+        for filename, content in knowledge.items():
+            files.append({
+                "filename": filename,
+                "content": content,
+                "size_chars": len(content),
+            })
+        return web.json_response({"files": files})
+
+    async def handle_knowledge_stats(self, request: web.Request) -> web.Response:
+        """Get knowledge system statistics."""
+        stats = await self.agent.get_knowledge_stats()
+        return web.json_response(stats)
+
+    async def handle_knowledge_consolidate(self, request: web.Request) -> web.Response:
+        """Trigger knowledge consolidation (dedup, merge, cleanup)."""
+        try:
+            await self.agent.consolidate_knowledge()
+            return web.json_response({"success": True, "message": "Knowledge consolidated"})
         except Exception as e:
             return web.json_response({"error": str(e)}, status=500)
 

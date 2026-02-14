@@ -10,11 +10,17 @@ agent:
     model: "gpt-4o"             # gpt-4o | claude-sonnet-4-20250514 | llama3
     temperature: 0.7
     max_tokens: 4096
+  max_tool_rounds: 3            # Max consecutive tool use rounds per message
+  recent_messages: 20           # Number of recent messages to include in context
 
 memory:
   backend: "sqlite"
   vector_store: "chromadb"
   retention_days: 365           # 0 = keep forever
+
+knowledge:
+  directory: "knowledge"        # Where knowledge files live on disk
+  consolidation_threshold: 5000 # Consolidate files larger than this (chars)
 
 server:
   host: "0.0.0.0"
