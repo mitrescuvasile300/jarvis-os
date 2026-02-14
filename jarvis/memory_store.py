@@ -40,29 +40,40 @@ class MemoryStore:
         self.db.row_factory = sqlite3.Row
         self._create_tables()
 
-        # ChromaDB for vector search
+        # ChromaDB for vector search (semantic memory layer)
         vector_store = self.config.get("vector_store", "chromadb")
         if vector_store == "chromadb":
             try:
                 import chromadb
-                chroma_host = self.config.get("chroma_host", "chromadb")
-                chroma_port = self.config.get("chroma_port", 8000)
-                try:
-                    self.chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
-                except Exception:
-                    # Fall back to persistent local
+                import os
+                chroma_host = os.environ.get("CHROMA_HOST") or self.config.get("chroma_host", "")
+                chroma_port = int(os.environ.get("CHROMA_PORT", 0)) or self.config.get("chroma_port", 8000)
+
+                if chroma_host:
+                    # External ChromaDB server (docker-compose.chromadb.yml)
+                    try:
+                        self.chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+                        self.chroma_client.heartbeat()  # verify connection
+                        logger.info(f"ChromaDB connected to {chroma_host}:{chroma_port}")
+                    except Exception:
+                        logger.warning(f"External ChromaDB at {chroma_host}:{chroma_port} unavailable, using local")
+                        persist_dir = str(Path("data/chroma"))
+                        self.chroma_client = chromadb.PersistentClient(path=persist_dir)
+                else:
+                    # Default: local persistent ChromaDB (no external container needed)
                     persist_dir = str(Path("data/chroma"))
                     self.chroma_client = chromadb.PersistentClient(path=persist_dir)
+                    logger.info("ChromaDB using local storage")
 
                 self.chroma_collection = self.chroma_client.get_or_create_collection(
                     name="jarvis_memory",
                     metadata={"hnsw:space": "cosine"},
                 )
-                logger.info(f"ChromaDB connected: {self.chroma_collection.count()} vectors")
+                logger.info(f"ChromaDB ready: {self.chroma_collection.count()} vectors")
             except ImportError:
                 logger.warning("ChromaDB not installed — semantic search disabled")
             except Exception as e:
-                logger.warning(f"ChromaDB connection failed: {e} — semantic search disabled")
+                logger.warning(f"ChromaDB init failed: {e} — semantic search disabled")
 
     def _create_tables(self):
         """Create SQLite tables."""

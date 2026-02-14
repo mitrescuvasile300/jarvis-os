@@ -24,27 +24,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
-    depends_on:
-      chromadb:
-        condition: service_healthy
-
-  chromadb:
-    image: chromadb/chroma:0.4.24
-    container_name: jarvis-chromadb
-    restart: unless-stopped
-    volumes:
-      - chroma-data:/chroma/chroma
-    ports:
-      - "8001:8000"
-    environment:
-      - IS_PERSISTENT=TRUE
-      - ANONYMIZED_TELEMETRY=FALSE
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
 
   # Optional: Scheduler for cron jobs
   scheduler:
@@ -72,5 +51,3 @@ volumes:
     name: jarvis-os-memory
   jarvis-skills:
     name: jarvis-os-skills
-  chroma-data:
-    name: jarvis-os-chroma

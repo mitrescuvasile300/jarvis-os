@@ -1,0 +1,36 @@
+# Optional: External ChromaDB server for enhanced vector search
+# Usage: docker compose -f docker-compose.yml -f docker-compose.chromadb.yml up -d
+#
+# Without this, Jarvis uses built-in ChromaDB (PersistentClient)
+# which works identically — just runs inside the agent container.
+
+services:
+  jarvis-agent:
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    environment:
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+
+  chromadb:
+    image: chromadb/chroma:0.4.24
+    container_name: jarvis-chromadb
+    restart: unless-stopped
+    volumes:
+      - chroma-data:/chroma/chroma
+    ports:
+      - "8001:8000"
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  chroma-data:
+    name: jarvis-os-chroma
