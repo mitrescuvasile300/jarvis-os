@@ -9,13 +9,17 @@
 #   ./start.sh
 #
 # After code changes:
-#   git pull && ./start.sh
+#   git pull && ./start.sh  (2 seconds)
 # ═══════════════════════════════════════════════════════════════
 
 set -e
 
+WORKSPACE="/root/jarvis/workspace"
+
 echo "🤖 Jarvis OS — Native Setup"
 echo "═══════════════════════════════"
+echo "  Repo:      $(pwd)"
+echo "  Workspace: ${WORKSPACE}"
 echo ""
 
 # ── 1. System dependencies (Chromium for Playwright) ──────
@@ -56,11 +60,19 @@ echo "🌐 Installing Chromium browser..."
 playwright install chromium
 echo "✅ Chromium installed"
 
-# ── 5. Create persistent directories ─────────────────────
+# ── 5. Create workspace ──────────────────────────────────
 echo ""
-echo "📁 Creating data directories..."
-mkdir -p data knowledge settings data/uploads logs
-echo "✅ Directories created"
+echo "📁 Creating workspace at ${WORKSPACE}..."
+mkdir -p "${WORKSPACE}/knowledge"
+mkdir -p "${WORKSPACE}/data/agents"
+mkdir -p "${WORKSPACE}/data/chroma"
+mkdir -p "${WORKSPACE}/settings"
+mkdir -p "${WORKSPACE}/uploads"
+mkdir -p "${WORKSPACE}/projects"
+mkdir -p "${WORKSPACE}/research"
+mkdir -p "${WORKSPACE}/scripts"
+mkdir -p "${WORKSPACE}/logs"
+echo "✅ Workspace created"
 
 # ── 6. Create .env if missing ────────────────────────────
 if [ ! -f .env ]; then
@@ -71,10 +83,13 @@ if [ ! -f .env ]; then
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
 
+# Workspace (where Jarvis stores his data, separate from repo)
+JARVIS_WORKSPACE=/root/jarvis/workspace
+
 # Server port (default 8080)
 AGENT_PORT=8080
 EOF
-    echo "✅ Created .env (add your API keys there or use the Settings UI)"
+    echo "✅ Created .env"
 else
     echo "✓ .env already exists"
 fi
@@ -95,15 +110,14 @@ if [ -f .env ]; then
 fi
 
 # Load saved settings (API keys from the UI)
-if [ -f settings/keys.env ]; then
-    set -a; source settings/keys.env; set +a
+SETTINGS="${JARVIS_WORKSPACE:-/root/jarvis/workspace}/settings/keys.env"
+if [ -f "$SETTINGS" ]; then
+    set -a; source "$SETTINGS"; set +a
 fi
 
-# Ensure dirs exist
-mkdir -p data knowledge settings data/uploads logs
-
 echo "🤖 Starting Jarvis OS on port ${AGENT_PORT:-8080}..."
-echo "   Dashboard: http://localhost:${AGENT_PORT:-8080}"
+echo "   Dashboard:  http://localhost:${AGENT_PORT:-8080}"
+echo "   Workspace:  ${JARVIS_WORKSPACE:-/root/jarvis/workspace}"
 echo "   Press Ctrl+C to stop"
 echo ""
 
@@ -111,19 +125,11 @@ exec python -m jarvis.server
 STARTEOF
 chmod +x start.sh
 
-# ── 8. Create systemd service (optional) ─────────────────
+# ── 8. Create systemd service ────────────────────────────
 JARVIS_DIR="$(pwd)"
 JARVIS_USER="$(whoami)"
 
 cat > jarvis-os.service << SVCEOF
-# Jarvis OS — systemd service
-# Install:  sudo cp jarvis-os.service /etc/systemd/system/
-#           sudo systemctl daemon-reload
-#           sudo systemctl enable --now jarvis-os
-#
-# Logs:     journalctl -u jarvis-os -f
-# Restart:  sudo systemctl restart jarvis-os
-
 [Unit]
 Description=Jarvis OS — AI Operating System
 After=network.target
@@ -136,6 +142,7 @@ ExecStart=${JARVIS_DIR}/start.sh
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+Environment=JARVIS_WORKSPACE=${WORKSPACE}
 
 [Install]
 WantedBy=multi-user.target
@@ -145,17 +152,20 @@ echo ""
 echo "═══════════════════════════════════════════════════════════"
 echo "✅ Setup complete!"
 echo ""
+echo "  Repo (code):       $(pwd)"
+echo "  Workspace (data):  ${WORKSPACE}"
+echo ""
 echo "🚀 Start Jarvis:"
 echo "   ./start.sh"
 echo ""
 echo "🔄 After code changes:"
-echo "   git pull && ./start.sh"
+echo "   git pull && ./start.sh    (2 seconds)"
 echo ""
-echo "🔧 Run as background service (auto-restart on reboot):"
+echo "🔧 Background service (auto-restart on reboot):"
 echo "   sudo cp jarvis-os.service /etc/systemd/system/"
 echo "   sudo systemctl daemon-reload"
 echo "   sudo systemctl enable --now jarvis-os"
-echo "   journalctl -u jarvis-os -f    # view logs"
+echo "   journalctl -u jarvis-os -f"
 echo ""
 echo "🌐 Dashboard: http://YOUR_VPS_IP:8080"
 echo "═══════════════════════════════════════════════════════════"

@@ -25,7 +25,8 @@ class MemoryStore:
         self.config = config
         self.backend = config.get("backend", "sqlite")
         self.retention_days = config.get("retention_days", 365)
-        self.db_path = Path("data/memory.db")
+        from jarvis import workspace
+        self.db_path = workspace.path("data", "memory.db")
         self.db: sqlite3.Connection | None = None
         self.chroma_client = None
         self.chroma_collection = None
@@ -56,10 +57,10 @@ class MemoryStore:
                     self.chroma_client.heartbeat()
                     logger.info(f"ChromaDB connected to {chroma_host}:{chroma_port}")
                 except Exception:
-                    persist_dir = str(Path("data/chroma"))
+                    persist_dir = str(workspace.path("data", "chroma"))
                     self.chroma_client = chromadb.PersistentClient(path=persist_dir)
             else:
-                persist_dir = str(Path("data/chroma"))
+                persist_dir = str(workspace.path("data", "chroma"))
                 self.chroma_client = chromadb.PersistentClient(path=persist_dir)
 
             self.chroma_collection = self.chroma_client.get_or_create_collection(

@@ -253,7 +253,8 @@ class AgentManager:
         self.tools = tool_registry
         self.config = config
         self.agents: dict[str, SubAgent] = {}
-        self._agents_dir = Path("data/agents")
+        from jarvis import workspace
+        self._agents_dir = workspace.path("data", "agents")
         self._agents_dir.mkdir(parents=True, exist_ok=True)
 
     async def create_agent(

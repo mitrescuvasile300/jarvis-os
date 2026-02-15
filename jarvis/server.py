@@ -35,6 +35,11 @@ class JarvisServer:
 
     async def initialize(self):
         """Initialize the agent and all components."""
+        # Initialize workspace (separate from repo)
+        from jarvis import workspace
+        workspace.init(self.config)
+        logger.info(f"Workspace: {workspace.root()}")
+
         # Load saved settings before agent init (API keys, model choice)
         self._load_saved_settings()
 
@@ -137,12 +142,13 @@ class JarvisServer:
         return json.dumps({"agents": agents}, default=str)
 
     def _load_saved_settings(self):
-        """Load API keys and settings saved from the UI (persisted in Docker volume)."""
-        settings_file = Path("settings/keys.env")
+        """Load API keys and settings saved from the UI."""
+        from jarvis import workspace
+        settings_file = workspace.path("settings", "keys.env")
         if not settings_file.exists():
             return
 
-        logger.info("Loading saved settings from settings/keys.env")
+        logger.info(f"Loading saved settings from {settings_file}")
         for line in settings_file.read_text().splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
@@ -329,7 +335,8 @@ class JarvisServer:
             ext = "." + ext
 
         # Save to uploads directory
-        uploads_dir = Path("data/uploads")
+        from jarvis import workspace
+        uploads_dir = workspace.path("uploads")
         uploads_dir.mkdir(parents=True, exist_ok=True)
 
         file_id = f"{uuid.uuid4().hex[:12]}{ext}"
@@ -353,7 +360,8 @@ class JarvisServer:
         if not re.match(r'^[a-zA-Z0-9_\-\.]+$', filename):
             return web.json_response({"error": "Invalid filename"}, status=400)
 
-        file_path = Path("data/uploads") / filename
+        from jarvis import workspace
+        file_path = workspace.path("uploads") / filename
         if not file_path.exists():
             return web.json_response({"error": "Not found"}, status=404)
 
@@ -374,11 +382,11 @@ class JarvisServer:
     def _resolve_image_paths(self, image_ids: list) -> list[str]:
         """Resolve image IDs to file paths."""
         paths = []
+        from jarvis import workspace
         for img_id in image_ids:
-            # Could be a filename or a URL path
             if img_id.startswith("/api/uploads/"):
                 img_id = img_id.split("/")[-1]
-            file_path = Path("data/uploads") / img_id
+            file_path = workspace.path("uploads") / img_id
             if file_path.exists():
                 paths.append(str(file_path))
         return paths
@@ -655,11 +663,12 @@ class JarvisServer:
         if key:
             os.environ[env_var] = key
 
-        # Persist to settings file (bind mount for persistence)
-        settings_dir = Path("settings")
+        # Persist to settings file in workspace
+        from jarvis import workspace
+        settings_dir = workspace.path("settings")
         settings_dir.mkdir(parents=True, exist_ok=True)
         env_file = settings_dir / "keys.env"
-        logger.info(f"Saving settings to {env_file.resolve()} (exists={env_file.exists()})")
+        logger.info(f"Saving settings to {env_file} (exists={env_file.exists()})")
 
         if env_file.exists():
             content = env_file.read_text()

@@ -3,6 +3,11 @@
 # Override any value with environment variables (see .env.example)
 # ═══════════════════════════════════════════════════════════════
 
+# Workspace — where Jarvis stores all his data, projects, and files.
+# Separate from the repo so git pull never touches Jarvis's work.
+# Override with JARVIS_WORKSPACE env var.
+workspace: "/root/jarvis/workspace"
+
 agent:
   name: "Jarvis"
   llm:

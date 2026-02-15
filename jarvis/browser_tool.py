@@ -145,7 +145,8 @@ async def tool_screenshot(args: dict) -> str:
             await asyncio.sleep(1)  # Let rendering settle
 
         # Save screenshot
-        screenshots_dir = Path("data/uploads")
+        from jarvis import workspace
+        screenshots_dir = workspace.path("uploads")
         screenshots_dir.mkdir(parents=True, exist_ok=True)
 
         import uuid

@@ -207,12 +207,12 @@ class ChatWebSocket:
 
     def _resolve_image_paths(self, image_ids: list) -> list[str]:
         """Resolve image IDs to file paths."""
-        from pathlib import Path
+        from jarvis import workspace
         paths = []
         for img_id in image_ids:
             if img_id.startswith("/api/uploads/"):
                 img_id = img_id.split("/")[-1]
-            file_path = Path("data/uploads") / img_id
+            file_path = workspace.path("uploads") / img_id
             if file_path.exists():
                 paths.append(str(file_path))
         return paths

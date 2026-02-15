@@ -47,11 +47,11 @@ class ToolRegistry:
 
         self.register(
             name="read_file",
-            description="Read the contents of a file.",
+            description="Read the contents of a file. Relative paths resolve to workspace.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "File path to read"},
+                    "path": {"type": "string", "description": "File path (relative = workspace, e.g. 'research/notes.md', 'projects/my-app/main.py')"},
                 },
                 "required": ["path"],
             },
@@ -60,11 +60,11 @@ class ToolRegistry:
 
         self.register(
             name="write_file",
-            description="Write content to a file. Creates directories if needed.",
+            description="Write content to a file. Creates directories if needed. Relative paths resolve to workspace.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "File path to write"},
+                    "path": {"type": "string", "description": "File path (relative = workspace, e.g. 'research/ai-news.md', 'projects/bot/main.py', 'scripts/scraper.py')"},
                     "content": {"type": "string", "description": "Content to write"},
                 },
                 "required": ["path", "content"],
@@ -116,11 +116,11 @@ class ToolRegistry:
 
         self.register(
             name="list_files",
-            description="List files in a directory.",
+            description="List files in a directory. Relative paths resolve to workspace.",
             parameters={
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Directory path"},
+                    "path": {"type": "string", "description": "Directory path (relative = workspace, e.g. '.', 'projects', 'research')"},
                     "pattern": {"type": "string", "description": "Glob pattern (e.g., '*.py')"},
                 },
                 "required": ["path"],
@@ -189,9 +189,18 @@ async def tool_web_search(args: dict) -> str:
         return f"Search error: {e}"
 
 
+def _resolve_path(raw_path: str) -> Path:
+    """Resolve a path — relative paths go to workspace, absolute paths stay."""
+    from jarvis import workspace
+    p = Path(raw_path)
+    if p.is_absolute():
+        return p
+    return workspace.path(raw_path)
+
+
 async def tool_read_file(args: dict) -> str:
     """Read a file's contents."""
-    path = Path(args["path"])
+    path = _resolve_path(args["path"])
     if not path.exists():
         return f"File not found: {path}"
     try:
@@ -205,7 +214,7 @@ async def tool_read_file(args: dict) -> str:
 
 async def tool_write_file(args: dict) -> str:
     """Write content to a file."""
-    path = Path(args["path"])
+    path = _resolve_path(args["path"])
     content = args["content"]
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -313,7 +322,7 @@ async def tool_http_request(args: dict) -> str:
 
 async def tool_list_files(args: dict) -> str:
     """List files in a directory."""
-    path = Path(args["path"])
+    path = _resolve_path(args["path"])
     pattern = args.get("pattern", "*")
 
     if not path.exists():
@@ -341,7 +350,8 @@ async def tool_list_files(args: dict) -> str:
 async def tool_search_files(args: dict) -> str:
     """Search for a pattern in files."""
     pattern = args["pattern"]
-    search_path = args.get("path", ".")
+    raw_path = args.get("path", ".")
+    search_path = str(_resolve_path(raw_path))
     file_type = args.get("file_type", "")
 
     cmd = f"grep -rn '{pattern}' {search_path}"

@@ -83,9 +83,13 @@ DEFAULT_FILES = {
 class KnowledgeManager:
     """Manages disk-based knowledge files for persistent agent memory."""
 
-    def __init__(self, config: dict, knowledge_dir: str = "knowledge"):
+    def __init__(self, config: dict, knowledge_dir: str = None):
         self.config = config
-        self.knowledge_dir = Path(knowledge_dir)
+        if knowledge_dir:
+            self.knowledge_dir = Path(knowledge_dir)
+        else:
+            from jarvis import workspace
+            self.knowledge_dir = workspace.path("knowledge")
         self._cache: dict[str, str] = {}  # filename -> content
         self._last_loaded: dict[str, datetime] = {}
 
