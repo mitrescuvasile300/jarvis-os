@@ -276,23 +276,26 @@ class JarvisAgent:
     # ── Skill Knowledge Injection ─────────────────────────────
 
     def _inject_skill_knowledge(self, prompt_parts: list[str]):
-        """Inject SKILL.md knowledge from community skills into the prompt.
+        """Inject SKILL.md knowledge from built-in and community skills.
 
-        This gives Jarvis knowledge about available tools and integrations
-        (Google Workspace, Brave Search, Whisper, etc.) without requiring
-        the full SKILL.md to be loaded every time. Instead, we inject a
-        compact reference that the agent can use to answer questions and
-        use these tools.
+        Reads from both skills/ (built-in tool guides) and skills-community/
+        (community integrations). This gives Jarvis knowledge about how to
+        use its tools and integrations effectively.
         """
         from pathlib import Path
 
-        community_dir = Path("skills-community")
-        if not community_dir.exists():
+        # Read from both built-in skills and community skills
+        skill_dirs_to_scan = []
+        for base_dir in [Path("skills"), Path("skills-community")]:
+            if base_dir.exists():
+                skill_dirs_to_scan.extend(sorted(base_dir.iterdir()))
+
+        if not skill_dirs_to_scan:
             return
 
         # Build compact skill reference
         skill_refs = []
-        for skill_dir in sorted(community_dir.iterdir()):
+        for skill_dir in skill_dirs_to_scan:
             if not skill_dir.is_dir():
                 continue
             skill_md = skill_dir / "SKILL.md"
@@ -628,12 +631,15 @@ class JarvisAgent:
             if knowledge_str:
                 prompt_parts.append(f"\n{knowledge_str}")
 
-        # Inject registered tool names (so the LLM knows exactly what it can call)
-        tool_names = self.tools.list()
-        if tool_names:
+        # Inject registered tools from registry (auto-generated, not hardcoded)
+        tool_defs = self.tools.get_definitions()
+        if tool_defs:
+            prompt_parts.append("\n## Your Registered Tools")
+            prompt_parts.append("These are your actual callable tools right now:")
+            for t in tool_defs:
+                prompt_parts.append(f"- **{t['name']}**: {t['description']}")
             prompt_parts.append(
-                f"\n## Registered Tools (you can call these RIGHT NOW): "
-                f"{', '.join(tool_names)}"
+                "\nUse them! When a user asks for something a tool can do, call the tool."
             )
 
         # Add available skills info

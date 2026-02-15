@@ -520,10 +520,11 @@ class JarvisServer:
         if key:
             os.environ[env_var] = key
 
-        # Persist to settings file (in Docker volume for persistence)
+        # Persist to settings file (bind mount for persistence)
         settings_dir = Path("settings")
         settings_dir.mkdir(parents=True, exist_ok=True)
         env_file = settings_dir / "keys.env"
+        logger.info(f"Saving settings to {env_file.resolve()} (exists={env_file.exists()})")
 
         if env_file.exists():
             content = env_file.read_text()
@@ -549,6 +550,7 @@ class JarvisServer:
                 content += f"\n{model_var}={model}"
 
         env_file.write_text(content)
+        logger.info(f"Settings saved to {env_file.resolve()}: {len(content)} bytes")
 
         # Also write to root .env for backward compat
         root_env = Path(".env")

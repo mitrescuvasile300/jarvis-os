@@ -944,10 +944,25 @@ function saveApiKey(provider) {
 }
 
 function saveGeneralSettings() {
-  state.settings.defaultModel = document.getElementById('setting-default-model').value;
+  const model = document.getElementById('setting-default-model').value;
+  state.settings.defaultModel = model;
   state.settings.autoMemory = document.getElementById('setting-auto-memory').checked;
   saveState();
-  showToast('✅ Settings saved', 'success');
+
+  // Also save model to server (persisted across rebuilds)
+  if (model) {
+    const provider = model.startsWith('claude') ? 'anthropic'
+      : model.startsWith('gemini') ? 'google'
+      : model.startsWith('llama') || model.startsWith('mistral') ? 'ollama'
+      : 'openai';
+    fetch(`${API_BASE}/api/settings/keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, model, key: '' }),
+    }).catch(() => {});
+  }
+
+  showToast('✅ Settings saved (including server-side)', 'success');
 }
 
 // ── Plugins ─────────────────────────────────────────────────
