@@ -34,6 +34,9 @@ class JarvisServer:
 
     async def initialize(self):
         """Initialize the agent and all components."""
+        # Load saved settings before agent init (API keys, model choice)
+        self._load_saved_settings()
+
         await self.agent.initialize()
 
         # Load plugins
@@ -42,6 +45,45 @@ class JarvisServer:
             logger.info(f"Loaded {len(plugins)} plugin tool(s): {list(plugins.keys())}")
 
         logger.info(f"Agent '{self.agent.name}' initialized")
+
+    def _load_saved_settings(self):
+        """Load API keys and settings saved from the UI (persisted in Docker volume)."""
+        settings_file = Path("settings/keys.env")
+        if not settings_file.exists():
+            return
+
+        logger.info("Loading saved settings from settings/keys.env")
+        for line in settings_file.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip()
+                if value:
+                    os.environ[key] = value
+                    logger.info(f"  Restored: {key}={'*' * min(len(value), 8)}")
+
+                    # Also update in-memory config for LLM
+                    env_to_config = {
+                        "OPENAI_API_KEY": ("openai", "openai_api_key"),
+                        "ANTHROPIC_API_KEY": ("anthropic", "anthropic_api_key"),
+                        "GOOGLE_API_KEY": ("google", "google_api_key"),
+                    }
+                    if key in env_to_config:
+                        provider, config_key = env_to_config[key]
+                        self.config.setdefault("agent", {}).setdefault("llm", {})[config_key] = value
+
+                    # Restore model selection
+                    model_providers = {
+                        "OPENAI_MODEL": "openai",
+                        "ANTHROPIC_MODEL": "anthropic",
+                        "GOOGLE_MODEL": "google",
+                    }
+                    if key in model_providers:
+                        self.config.setdefault("agent", {}).setdefault("llm", {})["model"] = value
+                        self.config["agent"]["llm"]["provider"] = model_providers[key]
 
     def create_app(self) -> web.Application:
         """Create the aiohttp application."""
@@ -382,14 +424,17 @@ class JarvisServer:
         if key:
             os.environ[env_var] = key
 
-        # Persist to .env
-        env_file = Path(".env")
+        # Persist to settings file (in Docker volume for persistence)
+        settings_dir = Path("settings")
+        settings_dir.mkdir(parents=True, exist_ok=True)
+        env_file = settings_dir / "keys.env"
+
         if env_file.exists():
             content = env_file.read_text()
         else:
-            content = ""
+            content = "# Jarvis OS Settings (auto-saved from UI)\n"
 
-        # Update API key in .env
+        # Update API key
         if key:
             import re
             if f"{env_var}=" in content:
@@ -397,7 +442,7 @@ class JarvisServer:
             else:
                 content += f"\n{env_var}={key}"
 
-        # Update model in .env if provided
+        # Update model if provided
         if model:
             import re
             model_var = f"{provider.upper()}_MODEL"
@@ -407,8 +452,17 @@ class JarvisServer:
             else:
                 content += f"\n{model_var}={model}"
 
-        if content:
-            env_file.write_text(content)
+        env_file.write_text(content)
+
+        # Also write to root .env for backward compat
+        root_env = Path(".env")
+        try:
+            root_content = root_env.read_text() if root_env.exists() else ""
+            if key and f"{env_var}=" not in root_content:
+                root_content += f"\n{env_var}={key}"
+                root_env.write_text(root_content)
+        except Exception:
+            pass  # Not critical if root .env fails
 
         # ── HOT RELOAD: Apply changes to running agent ──
         try:

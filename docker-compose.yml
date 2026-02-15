@@ -9,11 +9,12 @@ services:
     ports:
       - "${AGENT_PORT:-8080}:8080"
     volumes:
-      - jarvis-data:/app/data
-      - jarvis-memory:/app/memory
-      - jarvis-skills:/app/skills
-      - ./config:/app/config:ro
-      - ./skills:/app/skills-custom:ro
+      # ── Persistent data (survives docker compose down + up) ──
+      - jarvis-data:/app/data            # SQLite DB + ChromaDB vectors
+      - jarvis-knowledge:/app/knowledge  # User profile, learnings, decisions
+      - jarvis-settings:/app/settings    # API keys & model config (saved from UI)
+      # ── Code mounts ──
+      - ./config:/app/config:ro          # jarvis.yml (from repo)
     env_file:
       - .env
     environment:
@@ -23,12 +24,12 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
+      start_period: 180s
 
 volumes:
   jarvis-data:
     name: jarvis-os-data
-  jarvis-memory:
-    name: jarvis-os-memory
-  jarvis-skills:
-    name: jarvis-os-skills
+  jarvis-knowledge:
+    name: jarvis-os-knowledge
+  jarvis-settings:
+    name: jarvis-os-settings
