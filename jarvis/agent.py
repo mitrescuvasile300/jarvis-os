@@ -67,10 +67,7 @@ class JarvisAgent:
 
         # 3. Knowledge (disk-based files — the discipline system)
         knowledge_config = self.config.get("knowledge", {})
-        self.knowledge = KnowledgeManager(
-            config=knowledge_config,
-            knowledge_dir=knowledge_config.get("directory", "knowledge"),
-        )
+        self.knowledge = KnowledgeManager(config=knowledge_config)
         await self.knowledge.initialize()
 
         # 3b. Onboarding manager

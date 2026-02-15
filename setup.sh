@@ -1,36 +1,37 @@
 #!/bin/bash
-# Jarvis OS — First-time setup
-# Run once. After this, rebuilds take ~5 seconds.
+# Jarvis OS — Docker Setup
+# For native setup, use: ./setup-native.sh
 
-echo "🤖 Setting up Jarvis OS..."
+set -e
+
+echo "🤖 Jarvis OS — Docker Setup"
+echo "═══════════════════════════════"
 echo ""
 
-# 1. Create persistent directories
-mkdir -p persistent/data persistent/knowledge persistent/settings persistent/uploads
-echo "✅ Created persistent/ directories"
+# Create workspace directory for Docker bind mount
+mkdir -p persistent/workspace
 
-# 2. Create .env if missing
-if [ ! -f .env ]; then
-    cp .env.example .env 2>/dev/null || echo "# Jarvis OS Environment" > .env
-    echo "✅ Created .env"
+# Build base image (heavy deps — only needed once)
+if ! docker image inspect jarvis-base >/dev/null 2>&1; then
+    echo "📦 Building base image (first time, ~2-5 min)..."
+    docker build -f docker/Dockerfile.base -t jarvis-base .
+    echo "✅ Base image built"
 else
-    echo "✓ .env already exists"
+    echo "✓ Base image exists"
 fi
 
-# 3. Build base image (heavy deps — only needed once)
-echo ""
-echo "📦 Building base image (apt-get + pip + Chromium)..."
-echo "   This takes 2-3 minutes the first time, then never again."
-echo ""
-docker build -f docker/Dockerfile.base -t jarvis-base .
+# Create .env if missing
+if [ ! -f .env ]; then
+    cat > .env << 'EOF'
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
+AGENT_PORT=8080
+JARVIS_WORKSPACE=/app/workspace
+EOF
+    echo "✅ Created .env"
+fi
 
 echo ""
-echo "✅ Base image built! From now on, rebuilds take ~5 seconds."
-echo ""
-echo "🚀 Start Jarvis:"
-echo "   docker compose up -d --build"
-echo ""
-echo "🔄 After code changes:"
-echo "   git pull && docker compose up -d --build"
-echo ""
-echo "Open http://localhost:8080"
+echo "🚀 Start:  docker compose up -d --build"
+echo "📊 Logs:   docker compose logs -f"
+echo "🌐 Open:   http://localhost:8080"

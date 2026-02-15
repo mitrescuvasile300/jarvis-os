@@ -9,17 +9,15 @@ services:
     ports:
       - "${AGENT_PORT:-8080}:8080"
     volumes:
-      # ── Persistent data (bind mounts — files live on YOUR disk) ──
-      - ./persistent/data:/app/data            # SQLite DB + ChromaDB vectors
-      - ./persistent/knowledge:/app/knowledge  # User profile, learnings, decisions
-      - ./persistent/settings:/app/settings    # API keys & model config (saved from UI)
-      - ./persistent/uploads:/app/data/uploads # Uploaded images
+      # ── Workspace (all Jarvis data — separate from code) ──
+      - ./persistent/workspace:/app/workspace
       # ── Code mounts ──
-      - ./config:/app/config:ro                # jarvis.yml (from repo)
+      - ./config:/app/config:ro
     env_file:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+      - JARVIS_WORKSPACE=/app/workspace
     healthcheck:
       test: ["CMD", "python", "-m", "jarvis.healthcheck"]
       interval: 30s

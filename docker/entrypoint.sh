@@ -1,14 +1,21 @@
 #!/bin/bash
-# Jarvis OS Entrypoint — ensures persistent directories exist with correct permissions
+# Jarvis OS Entrypoint
 
-# Create persistent dirs if they don't exist (bind mounts from host)
-mkdir -p /app/data /app/knowledge /app/settings /app/data/uploads /app/logs
+# Default workspace for Docker
+export JARVIS_WORKSPACE="${JARVIS_WORKSPACE:-/app/workspace}"
+
+# Create workspace dirs
+mkdir -p "${JARVIS_WORKSPACE}/data" "${JARVIS_WORKSPACE}/knowledge" \
+         "${JARVIS_WORKSPACE}/settings" "${JARVIS_WORKSPACE}/uploads" \
+         "${JARVIS_WORKSPACE}/projects" "${JARVIS_WORKSPACE}/research" \
+         "${JARVIS_WORKSPACE}/scripts" "${JARVIS_WORKSPACE}/logs" \
+         "${JARVIS_WORKSPACE}/data/agents" "${JARVIS_WORKSPACE}/data/chroma"
 
 # Load saved settings into environment (API keys, model config)
-if [ -f /app/settings/keys.env ]; then
-    echo "[entrypoint] Loading saved settings from /app/settings/keys.env"
+if [ -f "${JARVIS_WORKSPACE}/settings/keys.env" ]; then
+    echo "[entrypoint] Loading saved settings from ${JARVIS_WORKSPACE}/settings/keys.env"
     set -a
-    source /app/settings/keys.env
+    source "${JARVIS_WORKSPACE}/settings/keys.env"
     set +a
 fi
 

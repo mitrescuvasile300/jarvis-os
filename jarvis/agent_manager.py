@@ -158,27 +158,47 @@ class SubAgent:
             # Handle tool calls (single round for sub-agents)
             tools_used = []
             if response.get("tool_calls"):
-                tool_results = []
+                round_results = []
                 for tc in response["tool_calls"]:
                     tool_name = tc["name"]
+                    tool_call_id = tc.get("id", f"call_{tool_name}")
+
                     if self.allowed_tools and tool_name not in self.allowed_tools:
-                        tool_results.append(f"{tool_name}: not allowed for this agent")
+                        round_results.append({
+                            "tool_call_id": tool_call_id,
+                            "name": tool_name,
+                            "result": f"{tool_name}: not allowed for this agent",
+                        })
                         continue
 
                     try:
                         result = await self.tool_registry.execute(tool_name, tc["arguments"])
-                        tool_results.append(f"{tool_name}: {str(result)[:1000]}")
+                        round_results.append({
+                            "tool_call_id": tool_call_id,
+                            "name": tool_name,
+                            "result": str(result)[:2000],
+                        })
                         tools_used.append(tool_name)
                     except Exception as e:
-                        tool_results.append(f"{tool_name}: error - {e}")
+                        round_results.append({
+                            "tool_call_id": tool_call_id,
+                            "name": tool_name,
+                            "result": f"Error: {e}",
+                        })
                         tools_used.append(f"{tool_name}(failed)")
 
-                # Get final response with tool results
-                messages.append({"role": "assistant", "content": response_text or ""})
-                messages.append({
-                    "role": "system",
-                    "content": "Tool results:\n" + "\n".join(tool_results),
-                })
+                # Feed tool results back using correct OpenAI protocol
+                assistant_msg = {"role": "assistant", "content": response_text or ""}
+                if response.get("raw_tool_calls"):
+                    assistant_msg["tool_calls"] = response["raw_tool_calls"]
+                messages.append(assistant_msg)
+
+                for tr in round_results:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tr["tool_call_id"],
+                        "content": tr["result"],
+                    })
 
                 try:
                     follow_up = await self.llm.chat(
@@ -187,7 +207,8 @@ class SubAgent:
                     response_text = follow_up.get("text") or response_text
                 except Exception as e:
                     logger.error(f"[{self.name}] Follow-up LLM failed: {e}")
-                    response_text = f"Tool results:\n" + "\n".join(tool_results)
+                    tool_summary = "\n".join(f"- {tr['name']}: {tr['result'][:200]}" for tr in round_results)
+                    response_text = f"Tool results:\n{tool_summary}"
 
             if not response_text:
                 response_text = "I processed the request but couldn't generate a response."

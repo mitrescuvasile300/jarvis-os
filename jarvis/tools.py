@@ -226,6 +226,7 @@ async def tool_write_file(args: dict) -> str:
 
 async def tool_run_code(args: dict) -> str:
     """Execute Python code in a subprocess sandbox."""
+    from jarvis import workspace
     code = args["code"]
     timeout = int(os.getenv("CODE_EXEC_TIMEOUT", "30"))
 
@@ -234,6 +235,7 @@ async def tool_run_code(args: dict) -> str:
             "python", "-c", code,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=str(workspace.root()),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
 
@@ -255,6 +257,7 @@ async def tool_run_code(args: dict) -> str:
 
 async def tool_shell_command(args: dict) -> str:
     """Execute a shell command."""
+    from jarvis import workspace
     command = args["command"]
     timeout = int(os.getenv("CODE_EXEC_TIMEOUT", "30"))
 
@@ -268,6 +271,7 @@ async def tool_shell_command(args: dict) -> str:
             command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            cwd=str(workspace.root()),
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
 
