@@ -13,6 +13,7 @@ anthropic>=0.30,<1.0
 
 # Tools
 duckduckgo-search>=6.0,<7.0
+playwright>=1.40,<2.0
 
 # Testing (not installed in production Docker image)
 # pytest>=8.0,<9.0

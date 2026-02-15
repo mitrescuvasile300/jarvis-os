@@ -78,6 +78,14 @@ class JarvisAgent:
 
         # 4. Tools
         self.tools.register_defaults()
+
+        # Browser tools (Playwright)
+        try:
+            from jarvis.browser_tool import register_browser_tools
+            register_browser_tools(self.tools)
+        except ImportError:
+            logger.warning("Playwright not installed — browser tools disabled")
+
         logger.info(f"Tools registered: {', '.join(self.tools.list())}")
 
         # 5. Skills
