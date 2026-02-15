@@ -628,6 +628,14 @@ class JarvisAgent:
             if knowledge_str:
                 prompt_parts.append(f"\n{knowledge_str}")
 
+        # Inject registered tool names (so the LLM knows exactly what it can call)
+        tool_names = self.tools.list()
+        if tool_names:
+            prompt_parts.append(
+                f"\n## Registered Tools (you can call these RIGHT NOW): "
+                f"{', '.join(tool_names)}"
+            )
+
         # Add available skills info
         if self.skills:
             prompt_parts.append("\nYou have these skills available:")
