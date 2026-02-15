@@ -24,6 +24,9 @@ function loadState() {
     const saved = localStorage.getItem('jarvis_state_v2');
     if (saved) Object.assign(state, JSON.parse(saved));
   } catch (e) { console.warn('State load failed:', e); }
+
+  // Sync agents from server on load (server is source of truth)
+  syncAgentsFromServer();
 }
 
 function saveState() {
@@ -102,6 +105,9 @@ function refreshDashboard() {
     container.innerHTML = '<div class="grid grid-3">' + state.agents.map(agentCardHTML).join('') + '</div>';
   }
 
+  // Render sidebar agent tabs
+  renderSidebarAgentTabs();
+
   // Fetch live status from server
   fetchStatus();
 }
@@ -154,12 +160,46 @@ function refreshAgentsGrid() {
     grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
       <div class="empty-icon">🤖</div>
       <h3>No agents yet</h3>
-      <p>Create one manually or ask Jarvis to create one for you.</p>
+      <p>Create one manually or ask Jarvis: <em>"create a research agent"</em></p>
       <button class="btn btn-primary" onclick="openNewAgentModal()">➕ Create Agent</button>
     </div>`;
   } else {
     grid.innerHTML = state.agents.map(agentCardHTML).join('');
   }
+}
+
+// ── Sidebar Agent Tabs ────────────────────────────────────
+
+function renderSidebarAgentTabs() {
+  const container = document.getElementById('sidebar-agent-tabs');
+  if (!container) return;
+  const icons = { research: '🔍', trading: '📈', content: '✍️', devops: '🛠', custom: '🤖' };
+  container.innerHTML = state.agents.map(a => {
+    const icon = icons[a.template] || '🤖';
+    const active = state.chatAgent === a.id && state.currentPage === 'chat' ? 'active' : '';
+    const statusColor = a.status === 'idle' || a.status === 'running' ? 'var(--green)' : 'var(--text-muted)';
+    return `<div class="nav-item ${active}" onclick="openAgentChat('${a.id}')">
+      <span class="nav-icon">${icon}</span> ${a.name}
+      <span class="status-dot" style="color:${statusColor};margin-left:auto">●</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Sync agents from server ───────────────────────────────
+
+async function syncAgentsFromServer() {
+  try {
+    const res = await fetch(`${API_BASE}/api/agents`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.agents) {
+      state.agents = data.agents;
+      saveState();
+      renderSidebarAgentTabs();
+      refreshAgentsGrid();
+      refreshDashboard();
+    }
+  } catch (e) { /* server not ready */ }
 }
 
 // ── New Agent Modal ─────────────────────────────────────────
@@ -183,51 +223,43 @@ function closeNewAgentModal() {
   document.getElementById('new-agent-modal').classList.remove('active');
 }
 
-function createAgent(opts = null) {
+async function createAgent(opts = null) {
   const name = opts?.name || document.getElementById('new-agent-name').value.trim();
-  const model = opts?.model || document.getElementById('new-agent-model').value;
   const template = opts?.template || selectedTemplate;
   const personality = opts?.personality || document.getElementById('new-agent-personality')?.value?.trim() || '';
 
   if (!name) { showToast('Please enter an agent name', 'error'); return null; }
-  if (state.agents.find(a => a.name === name)) { showToast('Agent already exists', 'error'); return null; }
 
-  let provider = 'openai';
-  if (model.startsWith('claude')) provider = 'anthropic';
-  else if (['llama3', 'llama3.1', 'mistral', 'codellama', 'phi3'].includes(model)) provider = 'ollama';
-  else if (model.startsWith('gemini')) provider = 'google';
+  try {
+    const res = await fetch(`${API_BASE}/api/agents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, template, personality }),
+    });
 
-  const templateTools = {
-    trading: ['web_search', 'http_request', 'run_code', 'read_file', 'write_file', 'shell_command'],
-    research: ['web_search', 'http_request', 'read_file', 'write_file', 'run_code'],
-    content: ['web_search', 'http_request', 'read_file', 'write_file'],
-    support: ['web_search', 'read_file', 'search_files'],
-    devops: ['shell_command', 'http_request', 'read_file', 'write_file', 'run_code'],
-    'personal-assistant': ['web_search', 'http_request', 'read_file', 'write_file', 'run_code'],
-    custom: ['web_search', 'read_file', 'write_file'],
-  };
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(`Error: ${err.error || 'Failed to create agent'}`, 'error');
+      return null;
+    }
 
-  const agent = {
-    id: 'agent_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5),
-    name, template, model, provider, personality,
-    tools: templateTools[template] || templateTools.custom,
-    status: 'running',
-    createdAt: Date.now(),
-  };
+    const data = await res.json();
+    const agent = data.agent;
 
-  state.agents.push(agent);
-  state.chatHistories[agent.id] = [];
-  saveState();
+    // Sync from server to get full state
+    await syncAgentsFromServer();
 
-  addLog('success', `Agent "${name}" created (${template}/${model})`);
-  closeNewAgentModal();
-  showToast(`🤖 Agent "${name}" created!`, 'success');
-  refreshDashboard();
+    addLog('success', `Agent "${name}" created (${template})`);
+    closeNewAgentModal();
+    showToast(`🤖 Agent "${name}" created!`, 'success');
 
-  // Add to hub
-  addHubSystemMessage(`🤖 Agent "${name}" joined the hub`);
+    addHubSystemMessage(`🤖 Agent "${name}" joined the hub`);
 
-  return agent;
+    return agent;
+  } catch (e) {
+    showToast(`Error creating agent: ${e.message}`, 'error');
+    return null;
+  }
 }
 
 // ── Agent Actions ───────────────────────────────────────────
@@ -235,22 +267,38 @@ function createAgent(opts = null) {
 function toggleAgent(id) {
   const agent = state.agents.find(a => a.id === id);
   if (!agent) return;
-  agent.status = agent.status === 'running' ? 'stopped' : 'running';
+  agent.status = agent.status === 'idle' ? 'stopped' : 'idle';
   saveState();
   showToast(`Agent "${agent.name}" ${agent.status}`, 'info');
   refreshDashboard();
   refreshAgentsGrid();
+  renderSidebarAgentTabs();
 }
 
-function deleteAgent(id) {
+async function deleteAgent(id) {
   const agent = state.agents.find(a => a.id === id);
   if (!agent || !confirm(`Delete "${agent.name}"?`)) return;
+
+  try {
+    await fetch(`${API_BASE}/api/agents/${id}`, { method: 'DELETE' });
+  } catch (e) { /* ok if server unreachable */ }
+
   state.agents = state.agents.filter(a => a.id !== id);
   delete state.chatHistories[id];
   saveState();
   showToast(`Agent "${agent.name}" deleted`, 'info');
   refreshDashboard();
   refreshAgentsGrid();
+  renderSidebarAgentTabs();
+
+  if (state.chatAgent === id) {
+    state.chatAgent = null;
+    navigateTo('agents');
+  }
+}
+
+function deleteCurrentAgent() {
+  if (state.chatAgent) deleteAgent(state.chatAgent);
 }
 
 function openAgentChat(id) {
@@ -259,11 +307,22 @@ function openAgentChat(id) {
 
   const agent = state.agents.find(a => a.id === id);
   if (agent) {
+    const icons = { research: '🔍', trading: '📈', content: '✍️', devops: '🛠', custom: '🤖' };
+    const icon = icons[agent.template] || '🤖';
     document.getElementById('chat-agent-name').textContent = agent.name;
+    document.getElementById('chat-agent-status-text').textContent = agent.status || 'idle';
+
+    // Welcome screen
+    const welcomeName = document.getElementById('agent-welcome-name');
+    const welcomeDesc = document.getElementById('agent-welcome-desc');
+    if (welcomeName) welcomeName.textContent = `${icon} ${agent.name}`;
+    if (welcomeDesc) welcomeDesc.textContent = agent.system_prompt || `${agent.template} agent — ready to help.`;
+
     renderAgentChat(id);
     connectAgentWs(id);
   }
   navigateTo('chat');
+  renderSidebarAgentTabs();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -335,6 +394,25 @@ function connectJarvisWs() {
 }
 
 function handleJarvisWsMessage(data) {
+  // Route agent messages to agent handler if we're chatting with an agent
+  if (data.agent_id && data.agent_id.startsWith('agent_')) {
+    handleAgentWsMessage(data, data.agent_id);
+    return;
+  }
+
+  // Handle agents_updated event (Jarvis spawned an agent)
+  if (data.type === 'agents_updated') {
+    if (data.agents) {
+      state.agents = data.agents;
+      saveState();
+      renderSidebarAgentTabs();
+      refreshAgentsGrid();
+      refreshDashboard();
+      showToast('🤖 Agent list updated', 'success');
+    }
+    return;
+  }
+
   const container = document.getElementById('jarvis-messages');
   if (!container) return;
 
@@ -358,7 +436,7 @@ function handleJarvisWsMessage(data) {
     jarvisStreaming = '';
     enableJarvisInput(true);
 
-    // Check if Jarvis wants to create an agent
+    // Check if Jarvis wants to create an agent (legacy)
     detectAgentCreation(finalText);
   } else if (data.type === 'error') {
     removeStreamingBubble(container);
@@ -610,15 +688,11 @@ function handleJarvisKey(e) {
 // ── Agent auto-detection from Jarvis response ────────────
 
 function detectAgentCreation(text) {
-  // If Jarvis mentions creating an agent in its response,
-  // look for pattern: [SPAWN_AGENT:name:template:model]
+  // No longer needed — Jarvis uses spawn_agent tool which triggers agents_updated event
+  // Kept for backward compat with [SPAWN_AGENT:...] pattern
   const match = text.match(/\[SPAWN_AGENT:([^:]+):([^:]+):([^\]]+)\]/);
   if (match) {
-    const [, name, template, model] = match;
-    const agent = createAgent({ name, template, model });
-    if (agent) {
-      showToast(`⚡ Jarvis created agent "${name}"`, 'success');
-    }
+    syncAgentsFromServer();
   }
 }
 
@@ -630,17 +704,12 @@ let agentWs = null;
 let agentStreaming = '';
 
 function connectAgentWs(agentId) {
-  if (agentWs) { agentWs.close(); agentWs = null; }
-
-  try {
-    agentWs = new WebSocket(`${WS_BASE}/ws/chat?agent_id=${agentId}`);
-    agentWs.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      handleAgentWsMessage(data, agentId);
-    };
-    agentWs.onerror = () => { agentWs = null; };
-    agentWs.onclose = () => { agentWs = null; };
-  } catch (e) { agentWs = null; }
+  // Reuse the Jarvis WS connection — messages are routed by agent_id
+  // No separate connection needed since the WS handler routes by agent_id field
+  // Just ensure jarvis WS is connected
+  if (!jarvisWs || jarvisWs.readyState !== WebSocket.OPEN) {
+    connectJarvisWs();
+  }
 }
 
 function handleAgentWsMessage(data, agentId) {
@@ -663,15 +732,28 @@ function handleAgentWsMessage(data, agentId) {
     saveState();
     renderAgentChat(agentId);
     agentStreaming = '';
-    document.getElementById('chat-send').disabled = false;
-    document.getElementById('chat-input').disabled = false;
-    document.getElementById('chat-input').focus();
+    enableAgentInput(true);
   } else if (data.type === 'error') {
     removeStreamingBubble(container);
     showToast(`Error: ${data.message}`, 'error');
-    document.getElementById('chat-send').disabled = false;
-    document.getElementById('chat-input').disabled = false;
+    enableAgentInput(true);
+  } else if (data.type === 'agents_updated') {
+    // Server notified us that agents list changed (Jarvis spawned one)
+    if (data.agents) {
+      state.agents = data.agents;
+      saveState();
+      renderSidebarAgentTabs();
+      refreshAgentsGrid();
+      refreshDashboard();
+    }
   }
+}
+
+function enableAgentInput(enabled) {
+  const send = document.getElementById('chat-send');
+  const input = document.getElementById('chat-input');
+  if (send) send.disabled = !enabled;
+  if (input) { input.disabled = !enabled; if (enabled) input.focus(); }
 }
 
 function renderAgentChat(agentId) {
@@ -701,7 +783,7 @@ function renderAgentChat(agentId) {
   container.scrollTop = container.scrollHeight;
 }
 
-async function sendMessage() {
+async function sendAgentChatMessage() {
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
   if (!message || !state.chatAgent) return;
@@ -712,41 +794,38 @@ async function sendMessage() {
 
   input.value = '';
   renderAgentChat(agentId);
-  document.getElementById('chat-send').disabled = true;
-  input.disabled = true;
+  enableAgentInput(false);
 
-  // WebSocket
-  if (agentWs && agentWs.readyState === WebSocket.OPEN) {
+  // Use Jarvis WebSocket with agent_id routing
+  if (jarvisWs && jarvisWs.readyState === WebSocket.OPEN) {
     agentStreaming = '';
-    agentWs.send(JSON.stringify({
+    jarvisWs.send(JSON.stringify({
       type: 'message', text: message, agent_id: agentId, conversation_id: `chat_${agentId}`,
     }));
     return;
   }
 
-  // HTTP fallback
+  // HTTP fallback — call agent-specific endpoint
   try {
-    const res = await fetch(`${API_BASE}/api/chat`, {
+    const res = await fetch(`${API_BASE}/api/agents/${agentId}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, conversation_id: `chat_${agentId}` }),
+      body: JSON.stringify({ message }),
     });
-    const data = res.ok ? await res.json() : { text: 'Error connecting to server.' };
+    const data = res.ok ? await res.json() : { text: 'Error connecting to agent.' };
     state.chatHistories[agentId].push({
       role: 'agent', content: data.text || 'Received.',
       tools_used: data.tools_used || [], timestamp: Date.now(),
     });
   } catch (e) {
-    const agent = state.agents.find(a => a.id === agentId);
     state.chatHistories[agentId].push({
-      role: 'agent', content: simulateAgentResponse(agent, message), timestamp: Date.now(),
+      role: 'agent', content: `Error: ${e.message}`, timestamp: Date.now(),
     });
   }
 
   saveState();
   renderAgentChat(agentId);
-  document.getElementById('chat-send').disabled = false;
-  input.disabled = false;
+  enableAgentInput(true);
   input.focus();
 }
 
@@ -756,7 +835,7 @@ function simulateAgentResponse(agent, message) {
 }
 
 function handleChatKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAgentChatMessage(); }
 }
 
 // ═══════════════════════════════════════════════════════════

@@ -20,10 +20,11 @@ logger = logging.getLogger("jarvis.ws")
 
 
 class ChatWebSocket:
-    """Manages WebSocket connections for agent chat."""
+    """Manages WebSocket connections for Jarvis + sub-agent chats."""
 
     def __init__(self, agent):
         self.agent = agent
+        self.agent_manager = None  # Set by server after init
         self.connections: dict[str, list[web.WebSocketResponse]] = {}  # agent_id -> [ws]
 
     async def handle(self, request: web.Request) -> web.WebSocketResponse:
@@ -80,29 +81,37 @@ class ChatWebSocket:
             await ws.send_json({"type": "error", "message": f"Unknown type: {msg_type}"})
 
     async def _handle_chat(self, ws: web.WebSocketResponse, data: dict, agent_id: str):
-        """Handle a chat message with streaming response (supports images)."""
+        """Handle a chat message — routes to Jarvis or sub-agent."""
         text = data.get("text", "").strip()
-        image_ids = data.get("images", [])  # List of uploaded image IDs
+        image_ids = data.get("images", [])
+        target_agent = data.get("agent_id", "jarvis")  # "jarvis" or "agent_xxx"
 
         if not text and not image_ids:
             await ws.send_json({"type": "error", "message": "Empty message"})
             return
 
-        conversation_id = data.get("conversation_id", f"ws_{agent_id}")
+        # Route to sub-agent if target is not jarvis
+        if target_agent and target_agent != "jarvis" and target_agent.startswith("agent_"):
+            await self._handle_agent_chat(ws, text, target_agent)
+            return
 
-        # Resolve image paths
+        # Default: Jarvis chat
+        await self._handle_jarvis_chat(ws, data, agent_id, text, image_ids)
+
+    async def _handle_jarvis_chat(
+        self, ws, data: dict, agent_id: str, text: str, image_ids: list
+    ):
+        """Handle chat with Jarvis (main agent)."""
+        conversation_id = data.get("conversation_id", f"ws_{agent_id}")
         image_paths = self._resolve_image_paths(image_ids)
 
-        # Acknowledge receipt
         await ws.send_json({"type": "thinking", "text": "Processing..."})
 
         try:
-            # Try streaming response
             tools_used = []
             full_response = ""
 
             if hasattr(self.agent, "chat_stream"):
-                # Streaming mode — token by token
                 async for chunk in self.agent.chat_stream(
                     text, conversation_id=conversation_id, images=image_paths
                 ):
@@ -119,7 +128,6 @@ class ChatWebSocket:
                             "status": chunk.get("status", "running"),
                         })
             else:
-                # Fallback: non-streaming (simulate streaming by sending word by word)
                 response = await self.agent.chat(
                     text, conversation_id=conversation_id, images=image_paths
                 )
@@ -127,21 +135,25 @@ class ChatWebSocket:
                 tools_used = response.get("tools_used", [])
 
                 logger.info(
-                    f"Agent response: {len(full_response)} chars, "
+                    f"Jarvis response: {len(full_response)} chars, "
                     f"tools={tools_used}, preview={full_response[:100]!r}"
                 )
 
                 if not full_response.strip():
                     full_response = "I processed your request but couldn't generate a response. Check the logs for details."
 
-                # Simulate streaming for smooth UX
+                # Simulate streaming
                 words = full_response.split(" ")
                 for i, word in enumerate(words):
                     token = word + (" " if i < len(words) - 1 else "")
                     await ws.send_json({"type": "token", "text": token})
-                    await asyncio.sleep(0.02)  # 20ms per word
+                    await asyncio.sleep(0.02)
 
-            # Done
+            # Check if Jarvis spawned an agent (notify frontend to refresh)
+            if any(t in ["spawn_agent"] for t in tools_used):
+                agents = self.agent_manager.list_agents() if self.agent_manager else []
+                await ws.send_json({"type": "agents_updated", "agents": agents})
+
             await ws.send_json({
                 "type": "done",
                 "full_text": full_response,
@@ -149,7 +161,48 @@ class ChatWebSocket:
             })
 
         except Exception as e:
-            logger.error(f"Chat error: {e}")
+            logger.error(f"Jarvis chat error: {e}")
+            await ws.send_json({"type": "error", "message": str(e)})
+
+    async def _handle_agent_chat(self, ws, text: str, agent_id: str):
+        """Handle chat with a sub-agent via WebSocket."""
+        if not self.agent_manager:
+            await ws.send_json({"type": "error", "message": "Agent manager not ready"})
+            return
+
+        agent = self.agent_manager.get_agent(agent_id)
+        if not agent:
+            await ws.send_json({"type": "error", "message": f"Agent '{agent_id}' not found"})
+            return
+
+        await ws.send_json({"type": "thinking", "text": f"{agent.name} is thinking..."})
+
+        try:
+            result = await self.agent_manager.chat_with_agent(agent_id, text)
+            full_response = result.get("text") or "No response."
+            tools_used = result.get("tools_used", [])
+
+            logger.info(
+                f"Agent '{agent.name}' response: {len(full_response)} chars, tools={tools_used}"
+            )
+
+            # Simulate streaming
+            words = full_response.split(" ")
+            for i, word in enumerate(words):
+                token = word + (" " if i < len(words) - 1 else "")
+                await ws.send_json({"type": "token", "text": token})
+                await asyncio.sleep(0.02)
+
+            await ws.send_json({
+                "type": "done",
+                "full_text": full_response,
+                "tools_used": tools_used,
+                "agent_id": agent_id,
+                "agent_name": agent.name,
+            })
+
+        except Exception as e:
+            logger.error(f"Agent '{agent_id}' chat error: {e}")
             await ws.send_json({"type": "error", "message": str(e)})
 
     def _resolve_image_paths(self, image_ids: list) -> list[str]:

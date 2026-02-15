@@ -35,9 +35,10 @@
           <span class="nav-icon">⚡</span> Jarvis
           <span class="badge" style="background:var(--green)">online</span>
         </div>
-        <div class="nav-item" data-page="agents">
-          <span class="nav-icon">🤖</span> Agents
-          <span class="badge" id="agent-count-badge">0</span>
+        <!-- Dynamic agent tabs inserted here by JS -->
+        <div id="sidebar-agent-tabs"></div>
+        <div class="nav-item" data-page="agents" style="opacity:0.7">
+          <span class="nav-icon">➕</span> New Agent...
         </div>
         <div class="nav-item" data-page="hub">
           <span class="nav-icon">🌐</span> Agent Hub
@@ -194,17 +195,25 @@
     <!-- ════════ AGENT CHAT PAGE ════════ -->
     <div id="page-chat" class="page hidden">
       <div class="main-header">
-        <h2>💬 <span id="chat-agent-name">Agent</span></h2>
+        <h2>🤖 <span id="chat-agent-name">Agent</span></h2>
         <div class="header-actions">
-          <button class="btn btn-secondary btn-sm" onclick="navigateTo('agents')">← Back to Agents</button>
+          <span id="chat-agent-status" class="status status-running"><span class="status-dot"></span> <span id="chat-agent-status-text">idle</span></span>
+          <button class="btn btn-secondary btn-sm" onclick="navigateTo('agents')">All Agents</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCurrentAgent()">🗑 Delete</button>
         </div>
       </div>
       <div class="page-content" style="padding:0; height:calc(100vh - var(--header-h))">
         <div class="chat-container" style="height:100%; border:none; border-radius:0">
-          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-messages" id="chat-messages">
+            <div class="jarvis-welcome" id="agent-welcome">
+              <div class="jarvis-welcome-icon">🤖</div>
+              <h2 id="agent-welcome-name">Agent</h2>
+              <p id="agent-welcome-desc">Ready to help.</p>
+            </div>
+          </div>
           <div class="chat-input-area">
-            <textarea id="chat-input" placeholder="Type a message..." rows="1" onkeydown="handleChatKey(event)"></textarea>
-            <button class="chat-send-btn" id="chat-send" onclick="sendMessage()">↑</button>
+            <textarea id="chat-input" placeholder="Message this agent..." rows="1" onkeydown="handleChatKey(event)"></textarea>
+            <button class="chat-send-btn" id="chat-send" onclick="sendAgentChatMessage()">↑</button>
           </div>
         </div>
       </div>

@@ -30,6 +30,7 @@ class JarvisServer:
         self.agent = JarvisAgent(self.config)
         self.ws_handler = ChatWebSocket(self.agent)
         self.plugin_loader = PluginLoader()
+        self.agent_manager = None  # Initialized after agent.initialize()
         self.started_at = datetime.now()
 
     async def initialize(self):
@@ -39,12 +40,101 @@ class JarvisServer:
 
         await self.agent.initialize()
 
+        # Initialize AgentManager (shares LLM + tools with Jarvis)
+        from jarvis.agent_manager import AgentManager
+        self.agent_manager = AgentManager(self.agent.llm, self.agent.tools, self.config)
+        self.agent_manager.load_persisted_agents()
+        logger.info(f"AgentManager ready: {len(self.agent_manager.agents)} persisted agents loaded")
+
+        # Make agent_manager available to websocket handler
+        self.ws_handler.agent_manager = self.agent_manager
+
+        # Register spawn_agent tool so Jarvis can create agents
+        self._register_agent_tools()
+
         # Load plugins
         plugins = self.plugin_loader.load_all()
         if plugins:
             logger.info(f"Loaded {len(plugins)} plugin tool(s): {list(plugins.keys())}")
 
         logger.info(f"Agent '{self.agent.name}' initialized")
+
+    def _register_agent_tools(self):
+        """Register tools that let Jarvis spawn and manage agents."""
+        from jarvis.agent_manager import AGENT_TEMPLATES
+
+        templates_desc = ", ".join(AGENT_TEMPLATES.keys())
+
+        self.agent.tools.register(
+            name="spawn_agent",
+            description=(
+                f"Create a new AI agent. Available templates: {templates_desc}. "
+                "Each agent gets its own chat tab and can work independently."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Name for the agent"},
+                    "template": {
+                        "type": "string",
+                        "description": f"Agent template: {templates_desc}",
+                        "enum": list(AGENT_TEMPLATES.keys()),
+                    },
+                    "personality": {
+                        "type": "string",
+                        "description": "Optional personality/instructions",
+                    },
+                },
+                "required": ["name", "template"],
+            },
+            handler=self._handle_spawn_agent_tool,
+        )
+
+        self.agent.tools.register(
+            name="send_task_to_agent",
+            description="Send a task to a running agent and get the result.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "agent_id": {"type": "string", "description": "Agent ID"},
+                    "task": {"type": "string", "description": "Task description"},
+                },
+                "required": ["agent_id", "task"],
+            },
+            handler=self._handle_send_task_tool,
+        )
+
+        self.agent.tools.register(
+            name="list_agents",
+            description="List all spawned agents with their status.",
+            parameters={"type": "object", "properties": {}},
+            handler=self._handle_list_agents_tool,
+        )
+
+    async def _handle_spawn_agent_tool(self, params: dict) -> str:
+        """Tool handler: spawn a new agent."""
+        agent = await self.agent_manager.create_agent(
+            name=params["name"],
+            template=params.get("template", "custom"),
+            personality=params.get("personality", ""),
+        )
+        return json.dumps({
+            "success": True,
+            "agent_id": agent.id,
+            "name": agent.name,
+            "template": agent.template,
+            "message": f"Agent '{agent.name}' created! It now has its own chat tab in the sidebar.",
+        })
+
+    async def _handle_send_task_tool(self, params: dict) -> str:
+        """Tool handler: send task to agent."""
+        result = await self.agent_manager.send_task(params["agent_id"], params["task"])
+        return json.dumps(result, default=str)
+
+    async def _handle_list_agents_tool(self, params: dict) -> str:
+        """Tool handler: list agents."""
+        agents = self.agent_manager.list_agents()
+        return json.dumps({"agents": agents}, default=str)
 
     def _load_saved_settings(self):
         """Load API keys and settings saved from the UI (persisted in Docker volume)."""
@@ -111,6 +201,11 @@ class JarvisServer:
         app.router.add_get("/api/tools", self.handle_tools)
         app.router.add_post("/api/agents", self.handle_create_agent)
         app.router.add_get("/api/agents", self.handle_list_agents)
+        app.router.add_get("/api/agents/templates", self.handle_agent_templates)
+        app.router.add_get("/api/agents/{agent_id}", self.handle_get_agent)
+        app.router.add_delete("/api/agents/{agent_id}", self.handle_delete_agent)
+        app.router.add_post("/api/agents/{agent_id}/chat", self.handle_agent_chat)
+        app.router.add_post("/api/agents/{agent_id}/task", self.handle_agent_task)
         app.router.add_post("/api/settings/keys", self.handle_save_key)
         app.router.add_get("/api/plugins", self.handle_list_plugins)
         app.router.add_post("/api/plugins/{name}/run", self.handle_run_plugin)
@@ -395,7 +490,7 @@ class JarvisServer:
         })
 
     async def handle_create_agent(self, request: web.Request) -> web.Response:
-        """Create a new agent workspace."""
+        """Create a new agent via API."""
         try:
             data = await request.json()
         except Exception:
@@ -403,34 +498,74 @@ class JarvisServer:
 
         name = data.get("name", "").strip()
         template = data.get("template", "custom")
+        personality = data.get("personality", "")
 
         if not name:
             return web.json_response({"error": "Name is required"}, status=400)
 
         try:
-            from jarvis.init_command import create_agent_workspace
-            path = create_agent_workspace(name, template)
-            return web.json_response({"success": True, "workspace": path})
+            agent = await self.agent_manager.create_agent(
+                name=name, template=template, personality=personality,
+            )
+            return web.json_response({"success": True, "agent": agent.to_dict()})
         except Exception as e:
+            logger.error(f"Failed to create agent: {e}")
             return web.json_response({"error": str(e)}, status=500)
 
     async def handle_list_agents(self, request: web.Request) -> web.Response:
-        """List agent workspaces."""
-        workspaces = []
-        for d in Path(".").iterdir():
-            config = d / "agent.config.json"
-            if d.is_dir() and config.exists():
-                try:
-                    c = json.loads(config.read_text())
-                    workspaces.append({
-                        "name": c.get("name", d.name),
-                        "template": c.get("template", "custom"),
-                        "model": c.get("model", "unknown"),
-                        "path": str(d),
-                    })
-                except Exception:
-                    pass
-        return web.json_response({"agents": workspaces})
+        """List all agents."""
+        agents = self.agent_manager.list_agents()
+        return web.json_response({"agents": agents})
+
+    async def handle_agent_templates(self, request: web.Request) -> web.Response:
+        """Get available agent templates."""
+        return web.json_response({"templates": self.agent_manager.get_templates()})
+
+    async def handle_get_agent(self, request: web.Request) -> web.Response:
+        """Get a specific agent's details."""
+        agent_id = request.match_info["agent_id"]
+        agent = self.agent_manager.get_agent(agent_id)
+        if not agent:
+            return web.json_response({"error": "Agent not found"}, status=404)
+        return web.json_response({"agent": agent.to_dict()})
+
+    async def handle_delete_agent(self, request: web.Request) -> web.Response:
+        """Delete an agent."""
+        agent_id = request.match_info["agent_id"]
+        deleted = await self.agent_manager.delete_agent(agent_id)
+        if not deleted:
+            return web.json_response({"error": "Agent not found"}, status=404)
+        return web.json_response({"success": True})
+
+    async def handle_agent_chat(self, request: web.Request) -> web.Response:
+        """Chat with a specific agent (HTTP fallback)."""
+        agent_id = request.match_info["agent_id"]
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+
+        message = data.get("message", "").strip()
+        if not message:
+            return web.json_response({"error": "Message required"}, status=400)
+
+        result = await self.agent_manager.chat_with_agent(agent_id, message)
+        return web.json_response(result)
+
+    async def handle_agent_task(self, request: web.Request) -> web.Response:
+        """Send a task to an agent."""
+        agent_id = request.match_info["agent_id"]
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+
+        task = data.get("task", "").strip()
+        if not task:
+            return web.json_response({"error": "Task required"}, status=400)
+
+        result = await self.agent_manager.send_task(agent_id, task)
+        return web.json_response(result)
 
     async def handle_list_plugins(self, request: web.Request) -> web.Response:
         """List loaded plugins."""
