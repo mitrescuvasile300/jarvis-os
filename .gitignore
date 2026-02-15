@@ -24,11 +24,17 @@ env/
 .env
 !.env.example
 
-# Persistent data (bind-mounted, lives on host disk)
+# Persistent data (lives on host disk, not in repo)
 persistent/
 data/
 memory/
 logs/
+knowledge/
+settings/
+
+# Native run artifacts
+start.sh
+jarvis-os.service
 
 # OS
 .DS_Store
