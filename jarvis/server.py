@@ -179,16 +179,59 @@ class JarvisServer:
         return web.json_response({"query": query, "results": results})
 
     async def handle_skills(self, request: web.Request) -> web.Response:
-        """List available skills."""
+        """List available skills (built-in + community)."""
         skills = []
+
+        # Built-in skills (with actions)
         for name, skill in self.agent.skills.items():
             skills.append({
                 "name": name,
                 "description": skill.description,
                 "actions": list(skill.actions.keys()),
                 "enabled": skill.enabled,
+                "type": "built-in",
             })
-        return web.json_response({"skills": skills})
+
+        # Community skills (knowledge-based from SKILL.md)
+        from pathlib import Path
+        community_dir = Path("skills-community")
+        if community_dir.exists():
+            enabled_list = self.config.get("skills", {}).get("enabled", [])
+            for skill_dir in sorted(community_dir.iterdir()):
+                if not skill_dir.is_dir():
+                    continue
+                skill_md = skill_dir / "SKILL.md"
+                if not skill_md.exists():
+                    continue
+
+                # Parse description from frontmatter
+                desc = ""
+                try:
+                    content = skill_md.read_text(encoding="utf-8")
+                    if content.startswith("---"):
+                        for line in content.split("\n")[1:20]:
+                            if line.strip() == "---":
+                                break
+                            if line.startswith("description:"):
+                                desc = line.split(":", 1)[1].strip().strip('"').strip("'")
+                except Exception:
+                    pass
+
+                name = skill_dir.name
+                # Skip if already listed as built-in
+                if any(s["name"] == name for s in skills):
+                    continue
+
+                skills.append({
+                    "name": name,
+                    "description": desc or f"{name} community skill",
+                    "actions": [],
+                    "enabled": name in enabled_list or not enabled_list,
+                    "type": "community",
+                    "source": "clawhub",
+                })
+
+        return web.json_response({"skills": skills, "total": len(skills)})
 
     async def handle_skill_run(self, request: web.Request) -> web.Response:
         """Execute a skill action."""

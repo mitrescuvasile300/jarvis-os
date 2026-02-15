@@ -1,0 +1,4 @@
+name: "humanize-ai-text"
+description: "Humanize AI-generated text to bypass detection. This humanizer rewrites ChatGPT, Claude, and GPT content to sound natural and pass AI detectors like GPTZero, Turnitin, and Originality.ai. Based on ..."
+version: "1.0"
+source: "clawhub-community"

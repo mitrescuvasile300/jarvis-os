@@ -1,0 +1,4 @@
+name: "openai-whisper"
+description: "Local speech-to-text with the Whisper CLI (no API key)."
+version: "1.0"
+source: "clawhub-community"

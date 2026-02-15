@@ -233,6 +233,61 @@ class JarvisAgent:
             "knowledge_recalled": list(knowledge_context.keys()),
         }
 
+    # ── Skill Knowledge Injection ─────────────────────────────
+
+    def _inject_skill_knowledge(self, prompt_parts: list[str]):
+        """Inject SKILL.md knowledge from community skills into the prompt.
+
+        This gives Jarvis knowledge about available tools and integrations
+        (Google Workspace, Brave Search, Whisper, etc.) without requiring
+        the full SKILL.md to be loaded every time. Instead, we inject a
+        compact reference that the agent can use to answer questions and
+        use these tools.
+        """
+        from pathlib import Path
+
+        community_dir = Path("skills-community")
+        if not community_dir.exists():
+            return
+
+        # Build compact skill reference
+        skill_refs = []
+        for skill_dir in sorted(community_dir.iterdir()):
+            if not skill_dir.is_dir():
+                continue
+            skill_md = skill_dir / "SKILL.md"
+            if not skill_md.exists():
+                continue
+
+            # Check if this skill is enabled
+            if self.config.get("skills", {}).get("enabled"):
+                if skill_dir.name not in self.config["skills"]["enabled"]:
+                    continue
+
+            try:
+                content = skill_md.read_text(encoding="utf-8")
+                # Strip frontmatter
+                if content.startswith("---"):
+                    end = content.find("---", 3)
+                    if end > 0:
+                        content = content[end+3:].strip()
+
+                # Truncate very large skills to essentials (first 1500 chars)
+                if len(content) > 1500:
+                    content = content[:1500] + "\n[... truncated, read full SKILL.md for details]"
+
+                skill_refs.append(f"\n### {skill_dir.name}\n{content}")
+            except Exception:
+                continue
+
+        if skill_refs:
+            prompt_parts.append(
+                "\n\n## Installed Skills Reference\n"
+                "You have these tools and integrations installed. "
+                "Use them when relevant to help the user.\n"
+                + "\n".join(skill_refs)
+            )
+
     # ── Onboarding Flow ───────────────────────────────────────
 
     async def _handle_onboarding(self, message: str, conversation_id: str) -> dict | None:
@@ -462,6 +517,9 @@ class JarvisAgent:
             prompt_parts.append("\nYou have these skills available:")
             for name, skill in self.skills.items():
                 prompt_parts.append(f"- {name}: {skill.description}")
+
+        # Load knowledge from community SKILL.md files (instructions for tools/integrations)
+        self._inject_skill_knowledge(prompt_parts)
 
         return "\n".join(prompt_parts)
 

@@ -1,0 +1,4 @@
+name: "summarize"
+description: "Summarize URLs or files with the summarize CLI (web, PDFs, images, audio, YouTube)."
+version: "1.0"
+source: "clawhub-community"

@@ -1,0 +1,4 @@
+name: "caldav-calendar"
+description: "Sync and query CalDAV calendars (iCloud, Google, Fastmail, Nextcloud, etc.) using vdirsyncer + khal. Works on Linux."
+version: "1.0"
+source: "clawhub-community"

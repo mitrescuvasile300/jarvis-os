@@ -1,0 +1,4 @@
+name: "byterover"
+description: "Manages project knowledge using ByteRover context tree. Provides two operations: query (retrieve knowledge) and curate (store knowledge). Invoke when user requests information lookup, pattern disco..."
+version: "1.0"
+source: "clawhub-community"

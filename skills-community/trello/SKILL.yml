@@ -1,0 +1,4 @@
+name: "trello"
+description: "Manage Trello boards, lists, and cards via the Trello REST API."
+version: "1.0"
+source: "clawhub-community"

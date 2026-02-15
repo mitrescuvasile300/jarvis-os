@@ -68,6 +68,11 @@ class SkillLoader:
         if custom_path.exists():
             skills.update(await self._load_from_dir(custom_path))
 
+        # Load community skills (ClawHub etc)
+        community_path = Path("skills-community")
+        if community_path.exists():
+            skills.update(await self._load_from_dir(community_path))
+
         # Filter to enabled only (if specified)
         if self.enabled_skills:
             skills = {k: v for k, v in skills.items() if k in self.enabled_skills}

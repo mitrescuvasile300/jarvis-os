@@ -28,7 +28,32 @@ server:
 
 skills:
   enabled:
+    # Built-in skills
     - trading
     - research
     - content
     - code
+    # Community skills (from ClawHub)
+    - gog                    # Google Workspace (Gmail, Calendar, Drive, Sheets, Docs)
+    - summarize              # Summarize URLs, PDFs, YouTube, audio
+    - agent-browser          # Headless browser automation
+    - brave-search           # Web search via Brave API
+    - tavily-search          # AI-optimized web search via Tavily
+    - weather                # Weather forecasts (no API key)
+    - github                 # GitHub via gh CLI
+    - notion                 # Notion API
+    - obsidian               # Obsidian vault management
+    - himalaya               # Email via IMAP/SMTP
+    - caldav-calendar        # Calendar sync (iCloud, Google, etc.)
+    - slack                  # Slack messaging & reactions
+    - trello                 # Trello boards & cards
+    - nano-banana-pro        # Image generation (Gemini 3 Pro)
+    - nano-pdf               # PDF editing with natural language
+    - openai-whisper          # Speech-to-text (local, free)
+    - humanizer              # Make AI text sound human
+    - humanize-ai-text       # AI text detection & rewriting
+    - ontology               # Knowledge graph for structured memory
+    - proactive-agent        # Proactive behavior patterns
+    - self-improving-agent   # Error capture & continuous learning
+    - byterover              # Project knowledge management
+    - marketing-skills       # 23 marketing playbooks (CRO, SEO, copy, ads)
