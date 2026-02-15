@@ -7,7 +7,7 @@ agent:
   name: "Jarvis"
   llm:
     provider: "openai"          # openai | anthropic | ollama
-    model: "gpt-4o"             # gpt-4o | claude-sonnet-4-20250514 | llama3
+    model: "gpt-5.2"             # gpt-5.2 | claude-sonnet-4-20250514 | llama3
     temperature: 0.7
     max_tokens: 4096
   max_tool_rounds: 3            # Max consecutive tool use rounds per message

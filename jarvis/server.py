@@ -311,7 +311,7 @@ class JarvisServer:
             return web.json_response({"error": str(e)}, status=500)
 
     async def handle_save_key(self, request: web.Request) -> web.Response:
-        """Save an API key to .env."""
+        """Save an API key or model setting to .env and apply live."""
         try:
             data = await request.json()
         except Exception:
@@ -319,6 +319,7 @@ class JarvisServer:
 
         provider = data.get("provider", "")
         key = data.get("key", "")
+        model = data.get("model", "")
 
         env_map = {
             "openai": "OPENAI_API_KEY",
@@ -335,18 +336,55 @@ class JarvisServer:
             return web.json_response({"error": f"Unknown provider: {provider}"}, status=400)
 
         # Set in environment
-        os.environ[env_var] = key
+        if key:
+            os.environ[env_var] = key
 
-        # Persist to .env if it exists
+        # Persist to .env
         env_file = Path(".env")
         if env_file.exists():
             content = env_file.read_text()
+        else:
+            content = ""
+
+        # Update API key in .env
+        if key:
+            import re
             if f"{env_var}=" in content:
-                import re
                 content = re.sub(f"{env_var}=.*", f"{env_var}={key}", content)
             else:
                 content += f"\n{env_var}={key}"
+
+        # Update model in .env if provided
+        if model:
+            import re
+            model_var = f"{provider.upper()}_MODEL"
+            os.environ[model_var] = model
+            if f"{model_var}=" in content:
+                content = re.sub(f"{model_var}=.*", f"{model_var}={model}", content)
+            else:
+                content += f"\n{model_var}={model}"
+
+        if content:
             env_file.write_text(content)
+
+        # ── HOT RELOAD: Apply changes to running agent ──
+        try:
+            if key or model:
+                # Update in-memory config
+                if provider in ("openai", "anthropic", "ollama"):
+                    if key:
+                        self.config["agent"]["llm"][f"{provider}_api_key"] = key
+                    if model:
+                        self.config["agent"]["llm"]["model"] = model
+                        self.config["agent"]["llm"]["provider"] = provider
+
+                    # Reinitialize LLM client with new config
+                    from jarvis.llm import create_llm_client
+                    self.agent.llm = create_llm_client(self.config["agent"]["llm"])
+                    logger.info(f"LLM hot-reloaded: {provider} / {model or 'same model'}")
+
+        except Exception as e:
+            logger.warning(f"Hot reload failed (will apply on restart): {e}")
 
         return web.json_response({"success": True})
 

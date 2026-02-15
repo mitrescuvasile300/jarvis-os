@@ -21,6 +21,7 @@ from jarvis.memory_store import MemoryStore
 from jarvis.tools import ToolRegistry
 from jarvis.skill_loader import SkillLoader
 from jarvis.knowledge_manager import KnowledgeManager
+from jarvis.onboarding import OnboardingManager
 
 logger = logging.getLogger("jarvis.agent")
 
@@ -40,6 +41,7 @@ class JarvisAgent:
         self.llm = None
         self.memory = None
         self.knowledge = None
+        self.onboarding = None
         self.tools = ToolRegistry()
         self.skills: dict = {}
         self.integrations: dict = {}
@@ -69,6 +71,9 @@ class JarvisAgent:
             knowledge_dir=knowledge_config.get("directory", "knowledge"),
         )
         await self.knowledge.initialize()
+
+        # 3b. Onboarding manager
+        self.onboarding = OnboardingManager(self.knowledge)
 
         # 4. Tools
         self.tools.register_defaults()
@@ -113,6 +118,12 @@ class JarvisAgent:
             dict with keys: text, tools_used, memory_updated, knowledge_recalled
         """
         logger.info(f"[{conversation_id}] User: {message[:100]}...")
+
+        # ─── 0. ONBOARDING CHECK ──────────────────────────
+        # If Jarvis doesn't know the user yet, start the onboarding flow
+        onboarding_response = await self._handle_onboarding(message, conversation_id)
+        if onboarding_response:
+            return onboarding_response
 
         # ─── 1. RECALL — Read before acting ────────────────
         # Search memory database for relevant past conversations
@@ -220,6 +231,89 @@ class JarvisAgent:
             "tools_used": [t for t in tools_used if not t.endswith("(failed)")],
             "memory_updated": memory_updated,
             "knowledge_recalled": list(knowledge_context.keys()),
+        }
+
+    # ── Onboarding Flow ───────────────────────────────────────
+
+    async def _handle_onboarding(self, message: str, conversation_id: str) -> dict | None:
+        """Handle onboarding flow if active. Returns response dict or None."""
+        if not self.onboarding:
+            return None
+
+        # Check if there's an active onboarding session
+        onboarding_state = await self.memory.get_working("onboarding_state")
+
+        # If no active session, check if onboarding is needed
+        if not onboarding_state:
+            if self.onboarding.needs_onboarding():
+                # Start onboarding!
+                state = self.onboarding.get_onboarding_state()
+                await self.memory.set_working("onboarding_state", state)
+                intro = self.onboarding.get_intro_message()
+                logger.info("Starting onboarding flow for new user")
+                return {
+                    "text": intro,
+                    "tools_used": [],
+                    "memory_updated": False,
+                    "knowledge_recalled": [],
+                    "onboarding": True,
+                }
+            return None  # No onboarding needed
+
+        # Active onboarding — process the answer
+        if not onboarding_state.get("active"):
+            return None
+
+        state, next_message = self.onboarding.process_answer(onboarding_state, message)
+        await self.memory.set_working("onboarding_state", state)
+
+        if state["completed"]:
+            # Save profile and send completion message
+            await self.onboarding.save_profile(state)
+            completion_msg = self.onboarding.get_completion_message(state["answers"])
+            # Clear onboarding state
+            await self.memory.set_working("onboarding_state", None)
+            logger.info("Onboarding completed!")
+            return {
+                "text": completion_msg,
+                "tools_used": [],
+                "memory_updated": True,
+                "knowledge_recalled": [],
+                "onboarding": True,
+            }
+
+        # Ask next question (with LLM-generated acknowledgment)
+        prev_q = self.onboarding.get_current_question(
+            {"current_question_idx": state["current_question_idx"] - 1}
+        )
+        try:
+            ack = await self.llm.chat(
+                messages=[
+                    {"role": "system", "content": (
+                        "You are Jarvis, doing onboarding. The user just answered a question. "
+                        "Give a very brief, warm 1-line acknowledgment of their answer "
+                        "(show you understood), then ask the next question. "
+                        "Keep it natural and conversational. Use the same language as the user."
+                    )},
+                    {"role": "user", "content": (
+                        f"Previous question: {prev_q['question'] if prev_q else ''}\n"
+                        f"User's answer: {message}\n"
+                        f"Next question to ask: {next_message}"
+                    )},
+                ],
+                temperature=0.7,
+                max_tokens=200,
+            )
+            response_text = ack.get("text", next_message)
+        except Exception:
+            response_text = f"Got it! ✓\n\n{next_message}"
+
+        return {
+            "text": response_text,
+            "tools_used": [],
+            "memory_updated": False,
+            "knowledge_recalled": [],
+            "onboarding": True,
         }
 
     # ── Smart Conversation Management ────────────────────────
