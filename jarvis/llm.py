@@ -32,7 +32,22 @@ class BaseLLMClient(ABC):
 
 
 class OpenAIClient(BaseLLMClient):
-    """OpenAI API client (GPT-4o, GPT-4, etc.)."""
+    """OpenAI API client (GPT-4o, GPT-5, o1, o3, etc.)."""
+
+    # Models that require max_completion_tokens instead of max_tokens
+    NEW_PARAM_MODELS = {
+        "o1", "o1-mini", "o1-preview",
+        "o3", "o3-mini", "o3-pro",
+        "o4-mini",
+        "gpt-5", "gpt-5-mini", "gpt-5.1", "gpt-5.2",
+    }
+
+    # Reasoning models that don't support temperature
+    REASONING_MODELS = {
+        "o1", "o1-mini", "o1-preview",
+        "o3", "o3-mini", "o3-pro",
+        "o4-mini",
+    }
 
     def __init__(self, config: dict):
         try:
@@ -47,6 +62,16 @@ class OpenAIClient(BaseLLMClient):
         self.client = AsyncOpenAI(api_key=api_key)
         self.model = config.get("model", "gpt-4o")
 
+    def _uses_new_token_param(self) -> bool:
+        """Check if the model uses max_completion_tokens instead of max_tokens."""
+        model = self.model.lower()
+        return any(model.startswith(m) for m in self.NEW_PARAM_MODELS)
+
+    def _is_reasoning_model(self) -> bool:
+        """Check if this is a reasoning model (o1/o3/o4 series)."""
+        model = self.model.lower()
+        return any(model.startswith(m) for m in self.REASONING_MODELS)
+
     async def chat(
         self,
         messages: list[dict],
@@ -57,9 +82,18 @@ class OpenAIClient(BaseLLMClient):
         kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
         }
+
+        # Use correct token parameter based on model
+        if self._uses_new_token_param():
+            kwargs["max_completion_tokens"] = max_tokens
+        else:
+            kwargs["max_tokens"] = max_tokens
+
+        # Reasoning models (o1/o3/o4) don't support temperature
+        if not self._is_reasoning_model():
+            kwargs["temperature"] = temperature
+
         if tools:
             kwargs["tools"] = [
                 {"type": "function", "function": t} for t in tools
