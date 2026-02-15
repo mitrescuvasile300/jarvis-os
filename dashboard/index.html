@@ -165,8 +165,11 @@
               </div>
             </div>
           </div>
+          <div id="jarvis-image-preview" class="image-preview-strip" style="display:none"></div>
           <div class="chat-input-area">
-            <textarea id="jarvis-input" placeholder="Message Jarvis..." rows="1" onkeydown="handleJarvisKey(event)"></textarea>
+            <input type="file" id="jarvis-file-input" accept="image/*" multiple style="display:none" onchange="handleJarvisFiles(this.files)">
+            <button class="chat-attach-btn" onclick="document.getElementById('jarvis-file-input').click()" title="Attach image">📎</button>
+            <textarea id="jarvis-input" placeholder="Message Jarvis... (paste images with Ctrl+V)" rows="1" onkeydown="handleJarvisKey(event)" onpaste="handleJarvisPaste(event)"></textarea>
             <button class="chat-send-btn" id="jarvis-send" onclick="sendJarvisMessage()">↑</button>
           </div>
         </div>

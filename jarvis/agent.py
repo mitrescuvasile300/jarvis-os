@@ -111,13 +111,19 @@ class JarvisAgent:
 
         return integrations
 
-    async def chat(self, message: str, conversation_id: str = "default") -> dict:
+    async def chat(self, message: str, conversation_id: str = "default", images: list[str] | None = None) -> dict:
         """Process a chat message through the disciplined agent loop.
+
+        Args:
+            message: The user's text message.
+            conversation_id: Conversation thread identifier.
+            images: Optional list of image file paths to include (vision).
 
         Returns:
             dict with keys: text, tools_used, memory_updated, knowledge_recalled
         """
-        logger.info(f"[{conversation_id}] User: {message[:100]}...")
+        img_info = f", {len(images)} images" if images else ""
+        logger.info(f"[{conversation_id}] User: {message[:100]}...{img_info}")
 
         # ─── 0. ONBOARDING CHECK ──────────────────────────
         # If Jarvis doesn't know the user yet, start the onboarding flow
@@ -144,7 +150,7 @@ class JarvisAgent:
         # ─── 2. THINK — Build rich prompt, call LLM ───────
         system_prompt = self._build_system_prompt(knowledge_context)
         messages = self._build_messages(
-            system_prompt, conversation, relevant_memories, message
+            system_prompt, conversation, relevant_memories, message, images=images
         )
 
         # Available tools for the LLM
@@ -315,56 +321,132 @@ class JarvisAgent:
                 }
             return None  # No onboarding needed
 
-        # Active onboarding — process the answer
+        # Active onboarding — process through LLM for natural conversation
         if not onboarding_state.get("active"):
             return None
 
-        state, next_message = self.onboarding.process_answer(onboarding_state, message)
-        await self.memory.set_working("onboarding_state", state)
+        from jarvis.onboarding import ONBOARDING_QUESTIONS
 
-        if state["completed"]:
-            # Save profile and send completion message
+        state = onboarding_state
+        current_idx = state["current_question_idx"]
+        current_q = ONBOARDING_QUESTIONS[current_idx] if current_idx < len(ONBOARDING_QUESTIONS) else None
+
+        # Build conversation context for LLM
+        answered_summary = ""
+        if state["answers"]:
+            lines = []
+            for qid, data in state["answers"].items():
+                lines.append(f"- {data['knowledge_key']}: {data['answer']}")
+            answered_summary = "What I already know about the user:\n" + "\n".join(lines)
+
+        remaining_qs = []
+        for i in range(current_idx, min(current_idx + 3, len(ONBOARDING_QUESTIONS))):
+            remaining_qs.append(f"  {i+1}. {ONBOARDING_QUESTIONS[i]['question']}")
+
+        try:
+            llm_response = await self.llm.chat(
+                messages=[
+                    {"role": "system", "content": (
+                        f"You are Jarvis, an AI personal assistant. You're getting to know a new user "
+                        f"through a casual onboarding conversation.\n\n"
+                        f"IMPORTANT RULES:\n"
+                        f"- You are having a REAL conversation, not running a questionnaire\n"
+                        f"- If the user asks you something, ANSWER their question naturally first\n"
+                        f"- If the user gives feedback or complaints, ACKNOWLEDGE and RESPOND to them\n"
+                        f"- Only ask the next onboarding question when it flows naturally\n"
+                        f"- Match the user's language (if they write in Romanian, reply in Romanian)\n"
+                        f"- Be warm, genuine, and show personality — NOT robotic\n"
+                        f"- NEVER just say 'Înțeleg' or 'Got it' and move on — actually engage\n"
+                        f"- If the user's message contains useful info about them, extract it even if\n"
+                        f"  it wasn't a direct answer to the current question\n\n"
+                        f"{answered_summary}\n\n"
+                        f"Current onboarding question ({current_idx+1}/{len(ONBOARDING_QUESTIONS)}): "
+                        f"{current_q['question'] if current_q else 'ALL DONE'}\n\n"
+                        f"Upcoming questions:\n" + "\n".join(remaining_qs) + "\n\n"
+                        f"At the END of your response, output a JSON block with what you learned:\n"
+                        f"```json\n"
+                        f'{{"answered_current": true/false, "extracted_info": {{"key": "value"}}, "advance": true/false}}\n'
+                        f"```\n"
+                        f"- answered_current: did the user answer the current question?\n"
+                        f"- extracted_info: any useful info you learned (use knowledge_key names)\n"
+                        f"- advance: should we move to the next question?\n"
+                    )},
+                    {"role": "user", "content": message},
+                ],
+                temperature=0.8,
+                max_tokens=500,
+            )
+            response_text = llm_response.get("text", "")
+        except Exception as e:
+            logger.error(f"Onboarding LLM error: {e}")
+            # Fallback: simple acknowledge + next question
+            state["current_question_idx"] = current_idx + 1
+            await self.memory.set_working("onboarding_state", state)
+            next_q = current_q["question"] if current_q else "What can I help you with?"
+            return {
+                "text": f"Thanks for that! Next up — {next_q}",
+                "tools_used": [], "memory_updated": False,
+                "knowledge_recalled": [], "onboarding": True,
+            }
+
+        # Parse the JSON control block from LLM response
+        import json as _json
+        display_text = response_text
+        try:
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if json_match:
+                control = _json.loads(json_match.group(1))
+                # Remove JSON block from displayed text
+                display_text = response_text[:json_match.start()].strip()
+
+                # Extract any info the LLM found
+                extracted = control.get("extracted_info", {})
+                if extracted:
+                    for key, value in extracted.items():
+                        # Find matching question by knowledge_key
+                        for q in ONBOARDING_QUESTIONS:
+                            if q["knowledge_key"].lower() == key.lower() or q["id"] == key.lower():
+                                state["answers"][q["id"]] = {
+                                    "question": q["question"],
+                                    "answer": str(value),
+                                    "knowledge_key": q["knowledge_key"],
+                                    "category": q["category"],
+                                }
+                                break
+
+                # Advance to next question if appropriate
+                if control.get("advance", False) or control.get("answered_current", False):
+                    state["current_question_idx"] = current_idx + 1
+        except (_json.JSONDecodeError, AttributeError):
+            # No valid JSON — just advance if the message looks like an answer
+            if len(message.strip()) > 2 and message.strip().lower() not in ("?", "ok"):
+                if current_q:
+                    state["answers"][current_q["id"]] = {
+                        "question": current_q["question"],
+                        "answer": message,
+                        "knowledge_key": current_q["knowledge_key"],
+                        "category": current_q["category"],
+                    }
+                state["current_question_idx"] = current_idx + 1
+
+        # Check if onboarding is complete
+        if state["current_question_idx"] >= len(ONBOARDING_QUESTIONS):
+            state["completed"] = True
+            state["active"] = False
             await self.onboarding.save_profile(state)
             completion_msg = self.onboarding.get_completion_message(state["answers"])
-            # Clear onboarding state
             await self.memory.set_working("onboarding_state", None)
             logger.info("Onboarding completed!")
             return {
-                "text": completion_msg,
-                "tools_used": [],
-                "memory_updated": True,
-                "knowledge_recalled": [],
-                "onboarding": True,
+                "text": display_text + "\n\n" + completion_msg if display_text else completion_msg,
+                "tools_used": [], "memory_updated": True,
+                "knowledge_recalled": [], "onboarding": True,
             }
 
-        # Ask next question (with LLM-generated acknowledgment)
-        prev_q = self.onboarding.get_current_question(
-            {"current_question_idx": state["current_question_idx"] - 1}
-        )
-        try:
-            ack = await self.llm.chat(
-                messages=[
-                    {"role": "system", "content": (
-                        "You are Jarvis, doing onboarding. The user just answered a question. "
-                        "Give a very brief, warm 1-line acknowledgment of their answer "
-                        "(show you understood), then ask the next question. "
-                        "Keep it natural and conversational. Use the same language as the user."
-                    )},
-                    {"role": "user", "content": (
-                        f"Previous question: {prev_q['question'] if prev_q else ''}\n"
-                        f"User's answer: {message}\n"
-                        f"Next question to ask: {next_message}"
-                    )},
-                ],
-                temperature=0.7,
-                max_tokens=200,
-            )
-            response_text = ack.get("text", next_message)
-        except Exception:
-            response_text = f"Got it! ✓\n\n{next_message}"
+        await self.memory.set_working("onboarding_state", state)
 
         return {
-            "text": response_text,
+            "text": display_text or response_text,
             "tools_used": [],
             "memory_updated": False,
             "knowledge_recalled": [],
@@ -529,8 +611,13 @@ class JarvisAgent:
         conversation: list[dict],
         memories: list[dict],
         current_message: str,
+        images: list[str] | None = None,
     ) -> list[dict]:
-        """Build the full message list for the LLM."""
+        """Build the full message list for the LLM.
+
+        Args:
+            images: Optional list of file paths to images (for vision models).
+        """
         messages = [{"role": "system", "content": system_prompt}]
 
         # Add relevant memories (from database search)
@@ -558,10 +645,49 @@ class JarvisAgent:
         for msg in conversation:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Add current message
-        messages.append({"role": "user", "content": current_message})
+        # Add current message (with images if provided)
+        if images:
+            # Multi-modal message: text + images (OpenAI Vision format)
+            content_parts = []
+            if current_message:
+                content_parts.append({"type": "text", "text": current_message})
+            for img_path in images:
+                image_data = self._encode_image(img_path)
+                if image_data:
+                    content_parts.append({
+                        "type": "image_url",
+                        "image_url": {"url": image_data},
+                    })
+            messages.append({"role": "user", "content": content_parts})
+        else:
+            messages.append({"role": "user", "content": current_message})
 
         return messages
+
+    def _encode_image(self, image_path: str) -> str | None:
+        """Encode an image file to a base64 data URL for vision APIs."""
+        import base64
+        from pathlib import Path
+
+        path = Path(image_path)
+        if not path.exists():
+            logger.warning(f"Image not found: {image_path}")
+            return None
+
+        # Determine MIME type
+        ext = path.suffix.lower()
+        mime_types = {
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp",
+        }
+        mime_type = mime_types.get(ext, "image/png")
+
+        try:
+            data = base64.b64encode(path.read_bytes()).decode("utf-8")
+            return f"data:{mime_type};base64,{data}"
+        except Exception as e:
+            logger.error(f"Failed to encode image {image_path}: {e}")
+            return None
 
     def _format_tool_results(self, tools_used: list[dict]) -> str:
         """Format tool results for the LLM."""

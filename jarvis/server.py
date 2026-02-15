@@ -99,6 +99,8 @@ class JarvisServer:
         # API routes
         app.router.add_get("/health", self.handle_health)
         app.router.add_post("/api/chat", self.handle_chat)
+        app.router.add_post("/api/upload", self.handle_upload)
+        app.router.add_get("/api/uploads/{filename}", self.handle_serve_upload)
         app.router.add_get("/api/status", self.handle_status)
         app.router.add_get("/api/memory/search", self.handle_memory_search)
         app.router.add_get("/api/knowledge", self.handle_knowledge)
@@ -169,20 +171,27 @@ class JarvisServer:
         })
 
     async def handle_chat(self, request: web.Request) -> web.Response:
-        """Chat with the agent."""
+        """Chat with the agent (supports text + images)."""
         try:
             data = await request.json()
         except Exception:
             return web.json_response({"error": "Invalid JSON"}, status=400)
 
         message = data.get("message", "").strip()
-        if not message:
-            return web.json_response({"error": "Message is required"}, status=400)
+        image_ids = data.get("images", [])  # List of uploaded image IDs
+
+        if not message and not image_ids:
+            return web.json_response({"error": "Message or images required"}, status=400)
 
         conversation_id = data.get("conversation_id", "api")
 
+        # Resolve image paths
+        image_paths = self._resolve_image_paths(image_ids)
+
         try:
-            response = await self.agent.chat(message, conversation_id=conversation_id)
+            response = await self.agent.chat(
+                message, conversation_id=conversation_id, images=image_paths
+            )
             return web.json_response({
                 "text": response.get("text", ""),
                 "tools_used": response.get("tools_used", []),
@@ -191,6 +200,93 @@ class JarvisServer:
         except Exception as e:
             logger.error(f"Chat error: {e}")
             return web.json_response({"error": str(e)}, status=500)
+
+    async def handle_upload(self, request: web.Request) -> web.Response:
+        """Upload an image for use in chat."""
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+
+        image_data = data.get("image", "")
+        name = data.get("name", "image.png")
+
+        if not image_data:
+            return web.json_response({"error": "No image data"}, status=400)
+
+        import base64
+        import uuid
+
+        # Parse data URL: data:image/png;base64,iVBOR...
+        if "," in image_data:
+            header, b64_data = image_data.split(",", 1)
+        else:
+            b64_data = image_data
+
+        try:
+            img_bytes = base64.b64decode(b64_data)
+        except Exception:
+            return web.json_response({"error": "Invalid image data"}, status=400)
+
+        # Determine extension
+        ext = Path(name).suffix or ".png"
+        if not ext.startswith("."):
+            ext = "." + ext
+
+        # Save to uploads directory
+        uploads_dir = Path("data/uploads")
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        file_id = f"{uuid.uuid4().hex[:12]}{ext}"
+        file_path = uploads_dir / file_id
+        file_path.write_bytes(img_bytes)
+
+        logger.info(f"Image uploaded: {file_id} ({len(img_bytes)} bytes)")
+
+        return web.json_response({
+            "id": file_id,
+            "url": f"/api/uploads/{file_id}",
+            "size": len(img_bytes),
+        })
+
+    async def handle_serve_upload(self, request: web.Request) -> web.Response:
+        """Serve an uploaded file."""
+        filename = request.match_info["filename"]
+
+        # Security: only allow alphanumeric + dot + dash
+        import re
+        if not re.match(r'^[a-zA-Z0-9_\-\.]+$', filename):
+            return web.json_response({"error": "Invalid filename"}, status=400)
+
+        file_path = Path("data/uploads") / filename
+        if not file_path.exists():
+            return web.json_response({"error": "Not found"}, status=404)
+
+        # Determine content type
+        ext = file_path.suffix.lower()
+        content_types = {
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+        }
+        content_type = content_types.get(ext, "application/octet-stream")
+
+        return web.Response(
+            body=file_path.read_bytes(),
+            content_type=content_type,
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
+    def _resolve_image_paths(self, image_ids: list) -> list[str]:
+        """Resolve image IDs to file paths."""
+        paths = []
+        for img_id in image_ids:
+            # Could be a filename or a URL path
+            if img_id.startswith("/api/uploads/"):
+                img_id = img_id.split("/")[-1]
+            file_path = Path("data/uploads") / img_id
+            if file_path.exists():
+                paths.append(str(file_path))
+        return paths
 
     async def handle_status(self, request: web.Request) -> web.Response:
         """Detailed agent status."""

@@ -80,13 +80,18 @@ class ChatWebSocket:
             await ws.send_json({"type": "error", "message": f"Unknown type: {msg_type}"})
 
     async def _handle_chat(self, ws: web.WebSocketResponse, data: dict, agent_id: str):
-        """Handle a chat message with streaming response."""
+        """Handle a chat message with streaming response (supports images)."""
         text = data.get("text", "").strip()
-        if not text:
+        image_ids = data.get("images", [])  # List of uploaded image IDs
+
+        if not text and not image_ids:
             await ws.send_json({"type": "error", "message": "Empty message"})
             return
 
         conversation_id = data.get("conversation_id", f"ws_{agent_id}")
+
+        # Resolve image paths
+        image_paths = self._resolve_image_paths(image_ids)
 
         # Acknowledge receipt
         await ws.send_json({"type": "thinking", "text": "Processing..."})
@@ -98,7 +103,9 @@ class ChatWebSocket:
 
             if hasattr(self.agent, "chat_stream"):
                 # Streaming mode — token by token
-                async for chunk in self.agent.chat_stream(text, conversation_id=conversation_id):
+                async for chunk in self.agent.chat_stream(
+                    text, conversation_id=conversation_id, images=image_paths
+                ):
                     if chunk.get("type") == "token":
                         token = chunk["text"]
                         full_response += token
@@ -113,7 +120,9 @@ class ChatWebSocket:
                         })
             else:
                 # Fallback: non-streaming (simulate streaming by sending word by word)
-                response = await self.agent.chat(text, conversation_id=conversation_id)
+                response = await self.agent.chat(
+                    text, conversation_id=conversation_id, images=image_paths
+                )
                 full_response = response.get("text", "")
                 tools_used = response.get("tools_used", [])
 
@@ -134,6 +143,18 @@ class ChatWebSocket:
         except Exception as e:
             logger.error(f"Chat error: {e}")
             await ws.send_json({"type": "error", "message": str(e)})
+
+    def _resolve_image_paths(self, image_ids: list) -> list[str]:
+        """Resolve image IDs to file paths."""
+        from pathlib import Path
+        paths = []
+        for img_id in image_ids:
+            if img_id.startswith("/api/uploads/"):
+                img_id = img_id.split("/")[-1]
+            file_path = Path("data/uploads") / img_id
+            if file_path.exists():
+                paths.append(str(file_path))
+        return paths
 
     async def broadcast(self, agent_id: str, message: dict):
         """Send a message to all connections for an agent."""

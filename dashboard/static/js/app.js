@@ -280,6 +280,32 @@ function initJarvisChat() {
     const input = document.getElementById('jarvis-input');
     if (input) input.focus();
   }, 100);
+
+  // Drag & drop image support
+  const chatArea = document.querySelector('#page-jarvis-chat .chat-container') ||
+                   document.getElementById('page-jarvis-chat');
+  if (chatArea) {
+    chatArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (!chatArea.querySelector('.drop-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.className = 'drop-overlay';
+        overlay.textContent = '📷 Drop images here';
+        chatArea.style.position = 'relative';
+        chatArea.appendChild(overlay);
+      }
+    });
+    chatArea.addEventListener('dragleave', (e) => {
+      if (!chatArea.contains(e.relatedTarget)) {
+        chatArea.querySelector('.drop-overlay')?.remove();
+      }
+    });
+    chatArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      chatArea.querySelector('.drop-overlay')?.remove();
+      if (e.dataTransfer?.files) handleJarvisFiles(e.dataTransfer.files);
+    });
+  }
 }
 
 function connectJarvisWs() {
@@ -365,7 +391,15 @@ function renderJarvisMessages() {
     const time = new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const isUser = m.role === 'user';
     let html = `<div class="chat-message ${isUser ? 'user' : 'agent'}">`;
-    html += `<div>${formatMessage(m.content)}</div>`;
+    // Show attached images
+    if (m.images?.length) {
+      html += `<div class="msg-images">`;
+      m.images.forEach(src => {
+        html += `<img src="${src}" alt="Attached image" onclick="openLightbox('${src}')" loading="lazy">`;
+      });
+      html += `</div>`;
+    }
+    if (m.content) html += `<div>${formatMessage(m.content)}</div>`;
     if (m.tools_used?.length) html += `<div class="msg-tools">🔧 ${m.tools_used.join(', ')}</div>`;
     html += `<div class="msg-meta">${time}</div></div>`;
     return html;
@@ -374,40 +408,151 @@ function renderJarvisMessages() {
   container.scrollTop = container.scrollHeight;
 }
 
-function sendJarvisMessage(text) {
+// ── Image Handling ─────────────────────────────────────────
+
+let pendingImages = []; // Array of { dataUrl, file }
+
+function handleJarvisFiles(files) {
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    if (pendingImages.length >= 5) { showToast('Max 5 images per message', 'error'); break; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      pendingImages.push({ dataUrl: e.target.result, name: file.name });
+      renderImagePreview();
+    };
+    reader.readAsDataURL(file);
+  }
+  // Reset file input so same file can be re-selected
+  document.getElementById('jarvis-file-input').value = '';
+}
+
+function handleJarvisPaste(event) {
+  const items = event.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      event.preventDefault();
+      const file = item.getAsFile();
+      if (file) handleJarvisFiles([file]);
+    }
+  }
+}
+
+function renderImagePreview() {
+  const strip = document.getElementById('jarvis-image-preview');
+  if (!strip) return;
+  if (pendingImages.length === 0) {
+    strip.style.display = 'none';
+    strip.innerHTML = '';
+    return;
+  }
+  strip.style.display = 'flex';
+  strip.innerHTML = pendingImages.map((img, i) => `
+    <div class="image-preview-item">
+      <img src="${img.dataUrl}" alt="${img.name || 'image'}">
+      <button class="remove-img" onclick="removePendingImage(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function removePendingImage(index) {
+  pendingImages.splice(index, 1);
+  renderImagePreview();
+}
+
+function openLightbox(src) {
+  const overlay = document.createElement('div');
+  overlay.className = 'image-lightbox';
+  overlay.onclick = () => overlay.remove();
+  overlay.innerHTML = `<img src="${src}" alt="Full size">`;
+  document.body.appendChild(overlay);
+}
+
+async function uploadImages(images) {
+  // Upload images to server, returns array of image URLs/IDs
+  const uploaded = [];
+  for (const img of images) {
+    try {
+      const res = await fetch(`${API_BASE}/api/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: img.dataUrl, name: img.name || 'image.png' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        uploaded.push({ url: data.url, dataUrl: img.dataUrl, id: data.id });
+      }
+    } catch (e) {
+      console.error('Image upload failed:', e);
+    }
+  }
+  return uploaded;
+}
+
+// ── Send Message (with optional images) ───────────────────
+
+async function sendJarvisMessage(text) {
   const input = document.getElementById('jarvis-input');
   const message = text || input?.value?.trim();
-  if (!message) return;
+  const images = [...pendingImages];
+
+  if (!message && images.length === 0) return;
 
   // Navigate to Jarvis chat if not there
   if (state.currentPage !== 'jarvis-chat') navigateTo('jarvis-chat');
 
-  // Add user message
-  state.jarvisHistory.push({ role: 'user', content: message, timestamp: Date.now() });
+  // Add user message (with image dataUrls for display)
+  const userMsg = { role: 'user', content: message || '', timestamp: Date.now() };
+  if (images.length > 0) {
+    userMsg.images = images.map(i => i.dataUrl);
+  }
+  state.jarvisHistory.push(userMsg);
+
+  // Clear input + images
   if (input) input.value = '';
+  pendingImages = [];
+  renderImagePreview();
   saveState();
   renderJarvisMessages();
   enableJarvisInput(false);
 
+  // Upload images to server if any
+  let uploadedImages = [];
+  if (images.length > 0) {
+    uploadedImages = await uploadImages(images);
+    if (uploadedImages.length === 0 && images.length > 0) {
+      showToast('Image upload failed, sending text only', 'error');
+    }
+  }
+
   // Try WebSocket
   if (jarvisWs && jarvisWs.readyState === WebSocket.OPEN) {
     jarvisStreaming = '';
-    jarvisWs.send(JSON.stringify({
-      type: 'message', text: message, agent_id: 'jarvis', conversation_id: 'jarvis_main',
-    }));
+    const payload = {
+      type: 'message', text: message || '', agent_id: 'jarvis', conversation_id: 'jarvis_main',
+    };
+    if (uploadedImages.length > 0) {
+      payload.images = uploadedImages.map(i => i.id || i.url);
+    }
+    jarvisWs.send(JSON.stringify(payload));
     return;
   }
 
   // HTTP fallback
-  sendJarvisHTTP(message);
+  sendJarvisHTTP(message || '', uploadedImages);
 }
 
-async function sendJarvisHTTP(message) {
+async function sendJarvisHTTP(message, uploadedImages = []) {
   try {
+    const body = { message, conversation_id: 'jarvis_main' };
+    if (uploadedImages.length > 0) {
+      body.images = uploadedImages.map(i => i.id || i.url);
+    }
     const res = await fetch(`${API_BASE}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, conversation_id: 'jarvis_main' }),
+      body: JSON.stringify(body),
     });
 
     if (res.ok) {
