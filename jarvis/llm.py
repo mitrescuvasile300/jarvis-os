@@ -105,13 +105,27 @@ class OpenAIClient(BaseLLMClient):
         result: dict[str, Any] = {"text": message.content or ""}
 
         if message.tool_calls:
-            result["tool_calls"] = [
-                {
+            result["tool_calls"] = []
+            # Keep raw format for proper OpenAI follow-up messages
+            result["raw_tool_calls"] = []
+            for tc in message.tool_calls:
+                try:
+                    args = json.loads(tc.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    args = {"raw": tc.function.arguments}
+                result["tool_calls"].append({
+                    "id": tc.id,
                     "name": tc.function.name,
-                    "arguments": json.loads(tc.function.arguments),
-                }
-                for tc in message.tool_calls
-            ]
+                    "arguments": args,
+                })
+                result["raw_tool_calls"].append({
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                })
 
         return result
 

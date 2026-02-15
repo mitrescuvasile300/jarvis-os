@@ -123,8 +123,16 @@ class ChatWebSocket:
                 response = await self.agent.chat(
                     text, conversation_id=conversation_id, images=image_paths
                 )
-                full_response = response.get("text", "")
+                full_response = response.get("text") or ""
                 tools_used = response.get("tools_used", [])
+
+                logger.info(
+                    f"Agent response: {len(full_response)} chars, "
+                    f"tools={tools_used}, preview={full_response[:100]!r}"
+                )
+
+                if not full_response.strip():
+                    full_response = "I processed your request but couldn't generate a response. Check the logs for details."
 
                 # Simulate streaming for smooth UX
                 words = full_response.split(" ")

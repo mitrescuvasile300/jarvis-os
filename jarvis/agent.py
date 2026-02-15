@@ -172,6 +172,11 @@ class JarvisAgent:
             temperature=self.config["agent"]["llm"].get("temperature", 0.7),
             max_tokens=self.config["agent"]["llm"].get("max_tokens", 4096),
         )
+        logger.info(
+            f"[{conversation_id}] LLM response: "
+            f"text={len(response.get('text', ''))} chars, "
+            f"tool_calls={len(response.get('tool_calls', []))} calls"
+        )
 
         # ─── 3. ACT — Execute tools (multi-step) ──────────
         tools_used = []
@@ -185,43 +190,63 @@ class JarvisAgent:
             for tool_call in response["tool_calls"]:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["arguments"]
-                logger.info(f"[Round {round_num}] Executing tool: {tool_name}")
+                tool_call_id = tool_call.get("id", f"call_{round_num}_{tool_name}")
+                logger.info(f"[Round {round_num}] Executing tool: {tool_name}({tool_args})")
 
                 try:
                     result = await self.tools.execute(tool_name, tool_args)
                     round_results.append({
+                        "tool_call_id": tool_call_id,
                         "name": tool_name,
-                        "result": str(result)[:1000],
+                        "result": str(result)[:2000],
                     })
                     tools_used.append(tool_name)
                 except Exception as e:
                     logger.error(f"Tool {tool_name} failed: {e}")
                     round_results.append({
+                        "tool_call_id": tool_call_id,
                         "name": tool_name,
-                        "error": str(e),
+                        "result": f"Error: {e}",
                     })
                     tools_used.append(f"{tool_name}(failed)")
 
-            # Give results back to LLM for next step
-            messages.append({
-                "role": "assistant",
-                "content": response.get("text", ""),
-            })
-            messages.append({
-                "role": "system",
-                "content": f"Tool results (round {round_num}):\n"
-                           f"{self._format_tool_results(round_results)}",
-            })
+            # Feed tool results back to LLM using correct OpenAI format:
+            # 1. Assistant message with tool_calls attached
+            # 2. One "tool" role message per result with matching tool_call_id
+            assistant_msg = {"role": "assistant", "content": response.get("text") or ""}
+            if response.get("raw_tool_calls"):
+                assistant_msg["tool_calls"] = response["raw_tool_calls"]
+            messages.append(assistant_msg)
 
-            response = await self.llm.chat(
-                messages=messages,
-                tools=tool_definitions,
-                temperature=self.config["agent"]["llm"].get("temperature", 0.7),
-                max_tokens=self.config["agent"]["llm"].get("max_tokens", 4096),
-            )
+            for tr in round_results:
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tr["tool_call_id"],
+                    "content": tr["result"],
+                })
+
+            try:
+                response = await self.llm.chat(
+                    messages=messages,
+                    tools=tool_definitions,
+                    temperature=self.config["agent"]["llm"].get("temperature", 0.7),
+                    max_tokens=self.config["agent"]["llm"].get("max_tokens", 4096),
+                )
+                logger.info(
+                    f"[{conversation_id}] Tool follow-up LLM: "
+                    f"text={len(response.get('text', ''))} chars"
+                )
+            except Exception as e:
+                logger.error(f"[{conversation_id}] LLM follow-up failed: {e}")
+                # Fall back to summarizing tool results
+                tool_summary = "\n".join(
+                    f"- {tr['name']}: {tr['result'][:200]}" for tr in round_results
+                )
+                response = {"text": f"I used these tools:\n{tool_summary}"}
+                break
 
         # ─── 4. REMEMBER — Store conversation ─────────────
-        response_text = response.get("text", "I couldn't generate a response.")
+        response_text = response.get("text") or "I processed your request but couldn't generate a text response."
         await self.memory.store_message(conversation_id, "user", message)
         await self.memory.store_message(conversation_id, "assistant", response_text)
 
