@@ -24,7 +24,8 @@ env/
 .env
 !.env.example
 
-# Data (persist via Docker volumes, not git)
+# Persistent data (bind-mounted, lives on host disk)
+persistent/
 data/
 memory/
 logs/
